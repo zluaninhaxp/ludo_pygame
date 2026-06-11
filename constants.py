@@ -18,22 +18,55 @@ Caminho principal 52 casas (sentido horário):
 # ── Janela ─────────────────────────────────────────────────────────────────────
 W, H    = 960, 720
 SIDE_W  = 160
-BSIZE   = 600
-BX      = SIDE_W
-BY      = (H - BSIZE) // 2   # 60
-CELL    = BSIZE // 15         # 40
+
+# Mantemos o tabuleiro grandão (660px) para as casinhas do caminho ficarem largas
+BSIZE   = 660  
+
+_AREA_LIVRE_W = W - SIDE_W
+BX = SIDE_W + (_AREA_LIVRE_W - BSIZE) // 2   
+BY = (H - BSIZE) // 2                        
+
+CELL    = BSIZE // 15  # As casas agora têm 44 pixels!
 FPS     = 60
 
-# ── Paleta ─────────────────────────────────────────────────────────────────────
-WHITE  = (255, 255, 255)
-BLACK  = (0,   0,   0)
-CREAM  = (250, 248, 240)
-LGRAY  = (200, 200, 200)
-DGRAY  = (80,  80,  80)
-BG     = (24,  24,  40)
+# ── Escala da Base (O Truque da Ilusão) ───────────────────────────────────────
+BASE_SCALE  = 0.82  # Encolhe as bases em 18%
+BASE_SZ     = int(CELL * 6 * BASE_SCALE)
+BASE_OFFSET = (CELL * 6 - BASE_SZ) // 2
+B_CELL      = BASE_SZ / 6.0
 
-PC = {0:(204,40,40), 1:(34,160,34), 2:(40,100,210), 3:(210,165,20)}
-PL = {0:(255,180,180), 1:(160,235,160), 2:(160,195,255), 3:(255,230,120)}
+# ── Paleta Cute/Vector ──────────────────────────────────────────────────────────
+WHITE  = (255, 255, 255)
+BLACK  = (30,  28,  40)
+# Cream mais quente, lembrando papel de caderno
+CREAM  = (255, 250, 235)
+LGRAY  = (215, 210, 225)
+DGRAY  = (100,  90, 120)
+# Fundo principal: roxo-azul profundo bem saturado
+BG     = (42,  34,  74)
+
+# Paleta de jogadores: tons vibrantes mas suaves (não primários puros)
+# Vermelho-cereja, Verde-menta, Azul-celeste, Amarelo-mel
+PC = {
+    0: (235,  70,  90),   # Vermelho cereja
+    1: ( 50, 195, 120),   # Verde menta
+    2: ( 70, 140, 230),   # Azul celeste
+    3: (250, 185,  30),   # Amarelo mel
+}
+# Tons claros pastel de cada jogador (para home stretch, highlights)
+PL = {
+    0: (255, 185, 195),
+    1: (165, 240, 195),
+    2: (175, 210, 255),
+    3: (255, 230, 140),
+}
+# Tons bem escuros de cada jogador (para sombras/contornos)
+PD = {
+    0: (170,  30,  50),
+    1: ( 20, 140,  80),
+    2: ( 35,  85, 175),
+    3: (190, 135,  10),
+}
 PN = {0:"Vermelho", 1:"Verde", 2:"Azul", 3:"Amarelo"}
 
 # ── Caminho principal 52 casas ─────────────────────────────────────────────────
@@ -73,11 +106,37 @@ SAFE = {
     MPATH[26], MPATH[34], MPATH[39], MPATH[47],
 }
 
-def _yard(bc, br):
-    return [(BX+(bc+dc)*CELL+CELL//2, BY+(br+dr)*CELL+CELL//2)
-            for dr in range(2) for dc in range(2)]
+def _yard(oc, or_):
+    """Calcula os pixels dos buracos na base acompanhando as quinas."""
+    sz = CELL * 5.9
+    sobra = CELL * 6 - sz
+    
+    offset_x = sobra if oc == 9 else 0
+    offset_y = sobra if or_ == 9 else 0
+    
+    px = BX + oc * CELL + offset_x
+    py = BY + or_ * CELL + offset_y
+    
+    cx_base = px + sz / 2
+    cy_base = py + sz / 2
+    
+    # IMPORTANTE: Tem que ser o mesmo valor usado no board.py!
+    spread = 1.05 
+    
+    pts = []
+    for dr in [-1, 1]:
+        for dc in [-1, 1]:
+            cx_ = cx_base + dc * spread * CELL
+            cy_ = cy_base + dr * spread * CELL
+            pts.append((int(cx_), int(cy_)))
+    return pts
 
-YARDS = {0:_yard(1,1), 1:_yard(10,1), 2:_yard(10,10), 3:_yard(1,10)}
+YARDS = {
+    0: _yard(0, 0),
+    1: _yard(9, 0),
+    2: _yard(9, 9),
+    3: _yard(0, 9)
+}
 
 def gpx(col, row):
     return (BX + col*CELL + CELL//2, BY + row*CELL + CELL//2)

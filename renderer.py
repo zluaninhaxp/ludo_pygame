@@ -1,51 +1,111 @@
 """
-renderer.py — Desenho das peças, dado, painel lateral e telas de fim/menu.
+renderer.py — Peças, dado, sidebar e telas de fim.
+Estilo: cute / flat-vector / sticker.
+
+Linguagem visual (consistente com board.py):
+  · Cores planas e saturadas — zero alpha, zero gradiente
+  · Sombras flat sólidas (offset 3 px, cor escura sólida)
+  · Contorno universal _INK (roxo-escuro) espessura 2
+  · Flat highlight: faixa/retângulo sólido branco no topo dos elementos
+  · Peças: 3 camadas (sombra → corpo → anel claro) + highlight retangular
+  · Dado: corpo flat + highlight retangular branco no topo
+  · Sidebar: cards limpos com mesmo vocabulário visual
 """
 import pygame
 import math
 from constants import (
     W, H, SIDE_W, CELL, BX, BY,
-    WHITE, BLACK, LGRAY, DGRAY, BG,
-    PC, PL, PN, YARDS, gpx
+    WHITE, BLACK, BG,
+    PC, PL, PD, PN, YARDS, gpx,
 )
 
 # ── Fontes ────────────────────────────────────────────────────────────────────
 pygame.font.init()
-F_BIG = pygame.font.SysFont("Arial", 36, bold=True)
-F_MED = pygame.font.SysFont("Arial", 22, bold=True)
-F_SM  = pygame.font.SysFont("Arial", 16)
-F_XSM = pygame.font.SysFont("Arial", 13)
+
+def _load_font(size, bold=False):
+    for name in ("Fredoka One", "Nunito", "Varela Round",
+                 "Comic Sans MS", "Arial Rounded MT Bold"):
+        try:
+            return pygame.font.SysFont(name, size, bold=bold)
+        except Exception:
+            pass
+    return pygame.font.SysFont("Arial", size, bold=bold)
+
+F_BIG = _load_font(36, bold=True)
+F_MED = _load_font(22, bold=True)
+F_SM  = _load_font(16, bold=True)
+F_XSM = _load_font(13)
+
+# ── Paleta UI ────────────────────────────────────────────────────────────────
+_INK         = (52,  42,  76)
+_PANEL_BG    = (36,  26,  64)
+_PANEL_EDGE  = (72,  58, 112)
+_CARD_IDLE   = (54,  42,  86)
+_CARD_SH     = (20,  14,  42)
+_HINT_COL    = (255, 222,  60)
+_HINT_BG     = (62,  50,  98)
+_DIM         = (125, 112, 158)
+_RANK_GOLD   = (255, 208,   0)
+_RANK_SILVER = (198, 198, 198)
+_RANK_BRONZE = (190, 130,  50)
+
+_SH_OFF = 3
 
 
+def _sh(color, amt=45):
+    return (max(color[0]-amt, 0), max(color[1]-amt, 0), max(color[2]-amt, 0))
+
+
+# ── Texto ─────────────────────────────────────────────────────────────────────
 def _txt(surf, text, font, color, cx, cy, anchor="c"):
     img = font.render(str(text), True, color)
     r   = img.get_rect()
-    if anchor == "c":  r.center  = (cx, cy)
-    if anchor == "tl": r.topleft = (cx, cy)
-    if anchor == "tc": r.midtop  = (cx, cy)
+    if   anchor == "c":  r.center  = (cx, cy)
+    elif anchor == "tl": r.topleft = (cx, cy)
+    elif anchor == "tc": r.midtop  = (cx, cy)
     surf.blit(img, r)
+
+
+def _txt_sh(surf, text, font, color, cx, cy, sh_col=None, off=2):
+    sc = sh_col or _sh(color, 90)
+    _txt(surf, text, font, sc,    cx + off, cy + off)
+    _txt(surf, text, font, color, cx,       cy)
 
 
 # ── Dado ──────────────────────────────────────────────────────────────────────
 _DIE_DOTS = {
     1: [(0, 0)],
-    2: [(-1, -1), (1,  1)],
-    3: [(-1, -1), (0,  0), (1, 1)],
-    4: [(-1, -1), (1, -1), (-1, 1), (1, 1)],
-    5: [(-1, -1), (1, -1), (0,  0), (-1, 1), (1, 1)],
-    6: [(-1, -1), (1, -1), (-1, 0), (1,  0), (-1, 1), (1, 1)],
+    2: [(-1, -1), ( 1,  1)],
+    3: [(-1, -1), ( 0,  0), (1,  1)],
+    4: [(-1, -1), ( 1, -1), (-1, 1), (1, 1)],
+    5: [(-1, -1), ( 1, -1), ( 0,  0), (-1, 1), (1, 1)],
+    6: [(-1, -1), ( 1, -1), (-1,  0), ( 1, 0), (-1, 1), (1, 1)],
 }
 
 
-def draw_die(surf, val, spinning, cx, cy, size=60):
-    shadow = pygame.Rect(cx - size//2 + 3, cy - size//2 + 3, size, size)
-    rect   = pygame.Rect(cx - size//2,     cy - size//2,     size, size)
-    pygame.draw.rect(surf, (15, 15, 25), shadow, border_radius=10)
-    pygame.draw.rect(surf, (245, 245, 245), rect, border_radius=10)
-    pygame.draw.rect(surf, DGRAY, rect, 2,          border_radius=10)
-    dot_col = (180, 40, 40) if spinning else (25, 25, 25)
+def draw_die(surf, val, spinning, cx, cy, size=56):
+    rad = 11
+    face  = (255, 250, 238) if not spinning else (255, 234, 176)
+    border= (92,  74, 152) if not spinning else (235, 162,  28)
+    rect  = pygame.Rect(cx - size//2, cy - size//2, size, size)
+
+    # Corpo
+    pygame.draw.rect(surf, face, rect, border_radius=rad)
+    # Borda colorida
+    pygame.draw.rect(surf, border, rect, 3, border_radius=rad)
+    # Contorno ink (sticker)
+    pygame.draw.rect(surf, _INK, rect, 1, border_radius=rad)
+
+    # Pontos do dado
+    dot_fill = (212, 42, 68) if spinning else (46,  36, 72)
+    dot_sh   = _sh(dot_fill, 55)
+    step     = 14
+    r_dot    = 5
     for dx, dy in _DIE_DOTS.get(val, []):
-        pygame.draw.circle(surf, dot_col, (cx + dx*16, cy + dy*16), 7)
+        px_ = cx + dx * step
+        py_ = cy + dy * step
+        pygame.draw.circle(surf, dot_sh,  (px_ + 1, py_ + 1), r_dot)
+        pygame.draw.circle(surf, dot_fill,(px_,     py_),      r_dot)
 
 
 # ── Peças ─────────────────────────────────────────────────────────────────────
@@ -53,26 +113,21 @@ _OFFSETS4 = [(-7, -7), (7, -7), (-7, 7), (7, 7)]
 
 
 def draw_pieces(surf, game):
-    # Contar peças por célula para deslocamento
     cell_cnt = {}
     for pl in game.players:
         for p in pl.pieces:
-            if p.state == "active":
-                g = p.grid
-                if g:
-                    cell_cnt[g] = cell_cnt.get(g, 0) + 1
+            if p.state == "active" and p.grid:
+                cell_cnt[p.grid] = cell_cnt.get(p.grid, 0) + 1
     cell_ord = {}
 
-    anim_p  = game.anim_piece
-    astep   = (min(game.anim_step, len(game.anim_path) - 1)
-               if game.anim_path else 0)
+    anim_p = game.anim_piece
+    astep  = (min(game.anim_step, len(game.anim_path) - 1)
+              if game.anim_path else 0)
 
     for pl in game.players:
         for p in pl.pieces:
             if p.state == "done":
                 continue
-
-            # Posição pixel
             if p is anim_p and game.anim_path:
                 px, py = game.anim_path[astep]
             elif p.state == "home":
@@ -91,119 +146,218 @@ def draw_pieces(surf, game):
             else:
                 continue
 
-            highlighted = (p in game.movable and game.phase == "pick")
-            _draw_single_piece(surf, p.pid, p.idx, px, py, highlighted)
+            sel = (p in game.movable and game.phase == "pick")
+            _draw_piece(surf, p.pid, p.idx, px, py, sel)
 
 
-def _draw_single_piece(surf, pid, idx, px, py, highlighted):
-    r = CELL // 2 - 4
-    if highlighted:
-        pygame.draw.circle(surf, (255, 255,  60), (px, py), r + 6)
-        pygame.draw.circle(surf, (200, 180,   0), (px, py), r + 6, 2)
-    # Sombra
-    pygame.draw.circle(surf, (0, 0, 0, 80), (px + 2, py + 2), r)
-    # Corpo
+def _draw_piece(surf, pid, idx, px, py, sel):
+    """
+    Token flat-vector / sticker:
+      Camadas de baixo para cima:
+        1. Anel de seleção (se selecionável)
+        2. Sombra flat sólida
+        3. Corpo — PC[pid]
+        4. Anel interno claro — PL[pid]  (flat shading, não brilho)
+        5. Flat highlight: retângulo sólido branco no topo
+        6. Contorno duplo: PD[pid] espesso + _INK fino (sticker)
+        7. Número
+    """
+    r = CELL // 2 - 5
+
+    # 1 · Anel de seleção — flat, dois círculos concêntricos
+    if sel:
+        pygame.draw.circle(surf, _HINT_COL, (px, py), r + 7)
+        pygame.draw.circle(surf, WHITE,     (px, py), r + 7, 2)
+        pygame.draw.circle(surf, _INK,      (px, py), r + 7, 1)
+
+    # 3 · Corpo
     pygame.draw.circle(surf, PC[pid], (px, py), r)
-    # Anel interno branco
-    pygame.draw.circle(surf, WHITE, (px, py), r - 2, 2)
-    # Número
+
+    # 4 · Anel interno claro (flat 2-tone shading — não gummy)
+    ir = max(r - 5, 4)
+    pygame.draw.circle(surf, PL[pid], (px, py), ir)
+
+    # 6 · Contorno: borda colorida grossa + ink fino
+    pygame.draw.circle(surf, PD[pid], (px, py), r, 3)
+    pygame.draw.circle(surf, _INK,    (px, py), r, 1)
+
+    # 7 · Número central
     lbl = F_XSM.render(str(idx + 1), True, WHITE)
-    surf.blit(lbl, (px - lbl.get_width()//2, py - lbl.get_height()//2))
+    surf.blit(lbl, (px - lbl.get_width()  // 2,
+                    py - lbl.get_height() // 2))
 
 
-# ── Painel lateral ────────────────────────────────────────────────────────────
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 def draw_sidebar(surf, game):
-    sx = 6   # margem esquerda dentro do painel
+    sx   = 6
+    cw   = SIDE_W - sx * 2
+    ch   = 76
+
+    # Fundo e borda do painel
+    pygame.draw.rect(surf, _PANEL_BG,   (0, 0, SIDE_W, H))
+    pygame.draw.rect(surf, _PANEL_EDGE, (0, 0, SIDE_W, H), 3)
 
     # Título
-    _txt(surf, "LUDO", F_BIG, WHITE, SIDE_W//2, 30)
+    _txt_sh(surf, "LUDO", F_BIG, _HINT_COL, SIDE_W // 2, 32)
 
     # Cards dos jogadores
     for i, pl in enumerate(game.players):
-        y   = 68 + i * 84
+        y   = 66 + i * 84
         act = (i == game.turn and game.phase != "end")
-        bg  = PC[pl.pid] if act else (48, 48, 68)
-        pygame.draw.rect(surf, bg, (sx, y, SIDE_W - sx*2, 76), border_radius=9)
-        if act:
-            pygame.draw.rect(surf, (255, 255, 100),
-                             (sx, y, SIDE_W - sx*2, 76), 2, border_radius=9)
+        bg  = PC[pl.pid] if act else _CARD_IDLE
 
-        _txt(surf, PN[pl.pid],              F_SM,  WHITE, SIDE_W//2, y + 16)
-        _txt(surf, "Humano" if pl.human else "CPU",
-             F_XSM, (230, 230, 230) if act else (150, 150, 150),
-             SIDE_W//2, y + 33)
+        # Corpo do card
+        pygame.draw.rect(surf, bg,
+                         (sx, y, cw, ch), border_radius=11)
 
-        # Pips de progresso
+            # Borda destaque
+        pygame.draw.rect(surf, _HINT_COL,
+                        (sx, y, cw, ch), 3, border_radius=11)
+
+        # Contorno ink universal
+        pygame.draw.rect(surf, _INK,
+                         (sx, y, cw, ch), 1, border_radius=11)
+
+        _txt(surf, PN[pl.pid], F_SM,  WHITE, SIDE_W // 2, y + 17)
+        _txt(surf,
+             "Humano" if pl.human else "CPU",
+             F_XSM,
+             (235, 228, 255) if act else _DIM,
+             SIDE_W // 2, y + 35)
+
+        # Pips de progresso — flat, sem oval gelatinoso
         fin = sum(1 for p in pl.pieces if p.state == "done")
         for k in range(4):
-            c = WHITE if k < fin else PL[pl.pid]
-            cx_ = sx + 12 + k * 30
-            pygame.draw.circle(surf, c, (cx_, y + 58), 9)
-            pygame.draw.circle(surf, PC[pl.pid] if k < fin else (60,60,80),
-                               (cx_, y + 58), 9, 2)
+            cx_   = sx + 14 + k * 29
+            cy_   = y + 60
+            rp    = 8
+            sh_c  = PD[pl.pid] if k < fin else (18, 12, 38)
+            body  = WHITE      if k < fin else PL[pl.pid]
+            edge  = PC[pl.pid] if k < fin else (60, 48, 92)
 
-    # Placar
+            pygame.draw.circle(surf, sh_c, (cx_ + 1, cy_ + 2), rp)
+            pygame.draw.circle(surf, body, (cx_, cy_), rp)
+            pygame.draw.circle(surf, edge, (cx_, cy_), rp, 2)
+            if k < fin:
+                pygame.draw.circle(surf, _INK, (cx_, cy_), rp, 1)
+
+    # Placar (se houver)
     if game.rankings:
-        ry = 72 + len(game.players) * 84 + 8
-        _txt(surf, "Placar", F_XSM, (160, 160, 180), SIDE_W//2, ry)
-        medals = ["🥇", "🥈", "🥉", "4º"]
-        mcols  = [(255,215,0),(200,200,200),(180,130,50),(180,180,180)]
+        ry    = 70 + len(game.players) * 84 + 10
+        mcols = [_RANK_GOLD, _RANK_SILVER, _RANK_BRONZE, (148, 148, 148)]
+        lbls  = ["#1", "#2", "#3", "#4"]
+        _txt(surf, "Placar", F_XSM, _DIM, SIDE_W // 2, ry)
         for ri, pid in enumerate(game.rankings):
-            _txt(surf, f"{medals[min(ri,3)]} {PN[pid]}",
-                 F_XSM, mcols[min(ri,3)], SIDE_W//2, ry + 18 + ri * 20)
+            _txt(surf, f"{lbls[min(ri,3)]} {PN[pid]}",
+                 F_XSM, mcols[min(ri, 3)],
+                 SIDE_W // 2, ry + 18 + ri * 20)
 
     # Dado
-    dcx, dcy = SIDE_W//2, H - 165
-    spinning = game.dice_spin > 0
+    dcx, dcy = SIDE_W // 2, H - 158
+    spinning  = game.dice_spin > 0
     val = game.dice_show if spinning else (game.roll if game.roll else game.dice_final)
     draw_die(surf, val, spinning, dcx, dcy)
 
-    # Dica de controle
-    cp = game.cp()
+    # Balão de dica
+    cp   = game.cp()
+    hint = ""
     if game.phase == "roll" and cp.human and not spinning:
-        _txt(surf, "ESPAÇO = rolar", F_XSM, (200, 200, 80), SIDE_W//2, H - 95)
+        hint = "ESPACO = rolar"
     elif game.phase == "pick":
-        _txt(surf, "Clique na peça", F_XSM, (200, 200, 80), SIDE_W//2, H - 95)
+        hint = "Clique na peca"
     elif not cp.human and game.phase in ("roll", "aipick", "anim"):
-        _txt(surf, "CPU pensando...", F_XSM, (160, 160, 180), SIDE_W//2, H - 95)
+        hint = "CPU pensando..."
 
-    # Mensagem
+    if hint:
+        hw = SIDE_W - 12
+        hx = 6
+        hy = H - 96
+        # Corpo
+        pygame.draw.rect(surf, _HINT_BG,
+                         (hx, hy, hw, 28), border_radius=8)
+        # Borda destaque + ink
+        pygame.draw.rect(surf, _HINT_COL,
+                         (hx, hy, hw, 28), 2, border_radius=8)
+        pygame.draw.rect(surf, _INK,
+                         (hx, hy, hw, 28), 1, border_radius=8)
+        _txt(surf, hint, F_XSM, _HINT_COL, SIDE_W // 2, hy + 14)
+
+    # Mensagem de jogo
     if game.msg:
-        _wrap_text(surf, game.msg, F_XSM, (255, 220, 80), SIDE_W//2, H - 72, 20)
+        _wrap_text(surf, game.msg, F_XSM,
+                   (255, 205, 85), SIDE_W // 2, H - 60, 20)
 
 
-def _wrap_text(surf, text, font, color, cx, y_start, max_chars):
+def _wrap_text(surf, text, font, color, cx, y0, max_chars):
     words = text.split()
     line, lines = "", []
     for w in words:
-        test = (line + " " + w).strip()
-        if len(test) <= max_chars:
-            line = test
+        t = (line + " " + w).strip()
+        if len(t) <= max_chars:
+            line = t
         else:
-            if line:
-                lines.append(line)
+            if line: lines.append(line)
             line = w
-    if line:
-        lines.append(line)
+    if line: lines.append(line)
     for li, l in enumerate(lines[-4:]):
-        _txt(surf, l, font, color, cx, y_start + li * 16)
+        _txt(surf, l, font, color, cx, y0 + li * 16)
 
 
 # ── Tela de fim ───────────────────────────────────────────────────────────────
 def draw_end_screen(surf, game):
+    # Overlay semi-opaco (SRCALPHA para escurecer sem sumir)
     ov = pygame.Surface((W, H), pygame.SRCALPHA)
-    ov.fill((0, 0, 0, 175))
+    ov.fill((18, 10, 48, 205))
     surf.blit(ov, (0, 0))
 
-    _txt(surf, "🏆  FIM DE JOGO!", F_BIG, (255, 220, 30), W//2, H//2 - 130)
+    pw, ph = 430, 375
+    px = W // 2 - pw // 2
+    py = H // 2 - ph // 2 - 10
 
-    medals = ["🥇  1º lugar", "🥈  2º lugar", "🥉  3º lugar", "4º lugar"]
-    mcols  = [(255,215,0),(210,210,210),(180,130,50),(180,180,180)]
+    # Painel principal
+    pygame.draw.rect(surf, (46, 34, 84),
+                     (px, py, pw, ph), border_radius=18)
+    # Bordas
+    pygame.draw.rect(surf, _HINT_COL,
+                     (px, py, pw, ph), 4, border_radius=18)
+    pygame.draw.rect(surf, _INK,
+                     (px, py, pw, ph), 1, border_radius=18)
+
+    _txt_sh(surf, "FIM DE JOGO!", F_BIG, _HINT_COL, W // 2, py + 46)
+
+    # Plaquinhas de resultado
+    mcols = [_RANK_GOLD, _RANK_SILVER, _RANK_BRONZE, (150, 150, 150)]
+    lbls  = ["1o lugar", "2o lugar", "3o lugar", "4o lugar"]
     for ri, pid in enumerate(game.rankings):
-        col = mcols[min(ri, 3)]
-        _txt(surf, f"{medals[min(ri,3)]}: {PN[pid]}",
-             F_MED, col, W//2, H//2 - 60 + ri * 48)
+        row_y = py + 102 + ri * 54
+        plw, plh = 320, 40
+        plx = W // 2 - plw // 2
 
-    pygame.draw.rect(surf, (45, 150, 45),
-                     (W//2 - 95, H//2 + 148, 190, 48), border_radius=12)
-    _txt(surf, "[R]  Reiniciar", F_MED, WHITE, W//2, H//2 + 172)
+        # Corpo
+        pygame.draw.rect(surf, PC[pid],
+                         (plx, row_y - plh//2, plw, plh), border_radius=10)
+        # Bordas
+        pygame.draw.rect(surf, PD[pid],
+                         (plx, row_y - plh//2, plw, plh), 2, border_radius=10)
+        pygame.draw.rect(surf, _INK,
+                         (plx, row_y - plh//2, plw, plh), 1, border_radius=10)
+
+        _txt_sh(surf, f"{lbls[min(ri,3)]}: {PN[pid]}",
+                F_MED, WHITE, W // 2, row_y + 1)
+
+    # Botão Reiniciar
+    bx, by_ = W // 2 - 105, py + ph - 65
+    bw, bh  = 210, 48
+
+    pygame.draw.rect(surf, (10, 68, 10),
+                     (bx + 3, by_ + 4, bw, bh), border_radius=12)
+    pygame.draw.rect(surf, (50, 168, 50),
+                     (bx, by_, bw, bh), border_radius=12)
+    pygame.draw.rect(surf, (88, 208, 88),
+                     (bx + 6, by_ + 5, bw - 12, bh // 4), border_radius=7)
+    pygame.draw.rect(surf, (28, 118, 28),
+                     (bx, by_, bw, bh), 2, border_radius=12)
+    pygame.draw.rect(surf, _INK,
+                     (bx, by_, bw, bh), 1, border_radius=12)
+
+    _txt_sh(surf, "[R]  Reiniciar", F_MED, WHITE, W // 2, by_ + bh // 2 + 1)
