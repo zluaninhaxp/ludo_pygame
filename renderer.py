@@ -18,6 +18,7 @@ from constants import (
     W, H, SIDE_W, CELL, BX, BY,
     WHITE, BLACK, BG,
     PC, PL, PD, PN, YARDS, gpx,
+    PLAYER_CHOICES  # <--- Adicione isto aqui
 )
 
 # ── Fontes ────────────────────────────────────────────────────────────────────
@@ -112,40 +113,33 @@ def draw_die(surf, val, spinning, cx, cy, size=56):
 # ── Gerenciador de Imagens (Rostos) ───────────────────────────────────────────
 _PIECE_IMAGES = {}
 
-def _get_piece_image(pid, radius):
-    """Carrega a foto, redimensiona mantendo a proporção (sem amassar) e centraliza."""
-    key = (pid, radius)
+def _get_piece_image(personagem_nome, max_size):
+    """Carrega a foto transparente original, ajusta o tamanho e centraliza."""
+    key = (personagem_nome, max_size)
     if key in _PIECE_IMAGES:
         return _PIECE_IMAGES[key]
 
-    size = radius * 2
-    path = os.path.join("images", f"player_{pid}.png")
-    
-    # Cria a superfície final com fundo transparente
-    final_img = pygame.Surface((size, size), pygame.SRCALPHA)
+    final_img = pygame.Surface((max_size, max_size), pygame.SRCALPHA)
+    path = os.path.join("images", f"{personagem_nome}.png")
     
     try:
+        # Carrega a imagem respeitando a transparência perfeita que você já criou
         img = pygame.image.load(path).convert_alpha()
         orig_w, orig_h = img.get_size()
 
-        # MÁGICA DA PROPORÇÃO: Pega o menor fator de escala para garantir que caiba perfeitamente
-        scale = min(size / orig_w, size / orig_h)
+        # Escala gigante mantendo a proporção
+        scale = min(max_size / orig_w, max_size / orig_h)
         new_w = int(orig_w * scale)
         new_h = int(orig_h * scale)
-
-        # Redimensiona a imagem usando o mesmo fator para largura e altura (não distorce!)
         img = pygame.transform.smoothscale(img, (new_w, new_h))
 
-        # Calcula a posição X e Y para centralizar a imagem na superfície
-        pos_x = (size - new_w) // 2
-        pos_y = (size - new_h) // 2
+        pos_x = (max_size - new_w) // 2
+        pos_y = (max_size - new_h) // 2
         
-        # Como são PNGs transparentes, colamos direto no centro sem usar máscara
         final_img.blit(img, (pos_x, pos_y))
 
-    except Exception:
-        # Fallback caso a imagem não seja encontrada na pasta
-        pygame.draw.circle(final_img, PL[pid], (radius, radius), radius)
+    except Exception as e:
+        pass # Se não achar a imagem, não desenha nada (evita o fundo cinza)
 
     _PIECE_IMAGES[key] = final_img
     return final_img
@@ -190,40 +184,38 @@ def draw_pieces(surf, game):
 
 
 def _draw_piece(surf, pid, idx, px, py, sel):
-    """
-    Token com foto do jogador (agora sem bordas duras, apenas o PNG):
-      1. Anel de seleção (se selecionável)
-      2. Sombra flutuante suave
-      3. Imagem do rosto (proporcional)
-      4. Badge (bottonzinho) com o número da peça
-    """
-    r = CELL // 2 - 5
-
-    # 1 · Anel de seleção (quando é a vez de escolher quem anda)
-    if sel:
-        pygame.draw.circle(surf, _HINT_COL, (px, py), r + 6)
-        pygame.draw.circle(surf, WHITE,     (px, py), r + 6, 2)
-
-    # 2 · Sombra de elevação (mantemos uma sombrinha para o rosto não parecer liso no tabuleiro)
-    pygame.draw.circle(surf, (0, 0, 0, 25), (px, py + 3), r - 1)
-
-    # 3 · Imagem do rosto (proporcional e sem distorcer)
-    img = _get_piece_image(pid, r)
+    """Renderiza o rosto com uma sombra que segue o contorno exato da imagem."""
+    
+    max_size = int(CELL * 0.95)
+    nome_personagem = PLAYER_CHOICES.get(pid, "default")
+    
+    # Carregamos a imagem para calcular a sombra
+    img = _get_piece_image(nome_personagem, max_size)
     img_rect = img.get_rect(center=(px, py))
-    surf.blit(img, img_rect)
 
-    # 4 · Badge (Pequeno círculo no canto inferior direito com o número da peça)
-    badge_r = 7
-    bx, by = px + r - 5, py + r - 5
+    # 1 · Anel de seleção (mantido como você queria)
+    if sel:
+        r = max_size // 2
+        pygame.draw.circle(surf, _HINT_COL, (px, py), r + 4)
+        pygame.draw.circle(surf, WHITE,     (px, py), r + 4, 2)
+
+    # 2 · SOMBRA "CONTORNO GERAL" (Uniforme)
+    # Criamos uma versão maior da imagem em preto com transparência
+    shadow_size = int(max_size * 1.1) # Um pouquinho maior que o rosto
+    shadow_surf = pygame.Surface((shadow_size, shadow_size), pygame.SRCALPHA)
     
-    # Fundo e contorno do badge (ajuda a identificar a cor do jogador)
-    pygame.draw.circle(surf, PC[pid], (bx, by), badge_r)
-    pygame.draw.circle(surf, WHITE,   (bx, by), badge_r, 2)
+    # Redimensionamos a sombra para ser levemente maior
+    shadow_img = pygame.transform.smoothscale(img, (shadow_size, shadow_size))
     
-    # Número
-    lbl = F_XSM.render(str(idx + 1), True, WHITE)
-    surf.blit(lbl, (bx - lbl.get_width()  // 2,
-                    by - lbl.get_height() // 2 + 1))
+    # Pintamos essa sombra de preto com opacidade baixa
+    shadow_surf.blit(shadow_img, (0, 0))
+    shadow_surf.fill((0, 0, 0, 40), special_flags=pygame.BLEND_RGBA_MULT)
+    
+    # Blitamos centralizado (px, py), sem deslocamento lateral
+    surf.blit(shadow_surf, (px - shadow_size//2, py - shadow_size//2))
+
+    # 3 · Rosto real por cima (centralizado)
+    surf.blit(img, img_rect)
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────

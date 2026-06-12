@@ -1,32 +1,18 @@
-"""
-main.py — Entry point do Ludo.
-
-Estrutura de arquivos:
-  main.py       Loop principal, eventos globais
-  constants.py  Layout, paleta, caminhos (MPATH, HSTRETCH, SAFE…)
-  piece.py      Classes Piece e Player
-  game.py       Lógica de jogo (Game)
-  board.py      Desenho do tabuleiro
-  renderer.py   Desenho das peças, dado, painel lateral, telas
-  menu.py       Tela de configuração
-
-Controles:
-  ESPAÇO  → rolar dado (jogador humano)
-  clique  → selecionar peça a mover
-  R       → reiniciar (volta ao menu)
-"""
 import sys
 import pygame
 
-from constants import W, H, FPS, BG, SIDE_W
-from board    import draw_board
+# Importamos as constantes necessárias
+# Certifique-se de que BSIZE está em constants.py
+from constants import W, H, FPS, BG, SIDE_W, BSIZE
+from board     import draw_board
 from renderer import draw_pieces, draw_sidebar, draw_end_screen
 from menu     import Menu
 
-
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((W, H))
+    
+    # Usamos RESIZABLE para você poder aumentar a janela e ver melhor os rostinhos
+    screen = pygame.display.set_mode((W, H), pygame.RESIZABLE)
     pygame.display.set_caption("Ludo")
     clock  = pygame.time.Clock()
 
@@ -34,7 +20,7 @@ def main():
     game = None
 
     while True:
-        dt = clock.tick(FPS)   # ms desde o último frame
+        dt = clock.tick(FPS)
 
         # ── Eventos ───────────────────────────────────────────────────────────
         for event in pygame.event.get():
@@ -42,13 +28,16 @@ def main():
                 pygame.quit()
                 sys.exit()
 
+            # Fecha com ESC
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                pygame.quit()
+                sys.exit()
+
             if game is None:
-                # Tela de menu
                 result = menu.handle(event)
                 if result == "start":
                     game = menu.make_game()
             else:
-                # Tela de jogo
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
                         menu = Menu()
@@ -73,6 +62,7 @@ def main():
         if game is None:
             menu.draw(screen)
         else:
+            # draw_board precisa das constantes carregadas corretamente
             draw_board(screen)
             draw_pieces(screen, game)
             draw_sidebar(screen, game)
@@ -80,7 +70,6 @@ def main():
                 draw_end_screen(screen, game)
 
         pygame.display.flip()
-
 
 if __name__ == "__main__":
     main()

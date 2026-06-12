@@ -15,12 +15,10 @@ Caminho principal 52 casas (sentido horário):
   idx 39  entrada Amarelo   (6,13)
 """
 
-# ── Janela ─────────────────────────────────────────────────────────────────────
+# No seu constants.py
 W, H    = 960, 720
 SIDE_W  = 160
-
-# Mantemos o tabuleiro grandão (660px) para as casinhas do caminho ficarem largas
-BSIZE   = 660  
+BSIZE   = 660  # Verifique se esta linha existe!
 
 _AREA_LIVRE_W = W - SIDE_W
 BX = SIDE_W + (_AREA_LIVRE_W - BSIZE) // 2   
@@ -68,6 +66,13 @@ PD = {
     3: (190, 135,  10),
 }
 PN = {0:"Vermelho", 1:"Verde", 2:"Azul", 3:"Amarelo"}
+
+PLAYER_CHOICES = {
+    0: "caruzo",    
+    1: "miguel",   
+    2: "darosa",  
+    3: "joãop"      
+}
 
 # ── Caminho principal 52 casas ─────────────────────────────────────────────────
 MPATH = (
