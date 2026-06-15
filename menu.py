@@ -1,260 +1,336 @@
 """
 menu.py — Tela de configuração da partida com seleção de personagens.
-
-Fluxo de telas:
-  1. "setup"   — escolhe nº de jogadores e tipo (humano/CPU)
-  2. "pick_N"  — galeria de personagens para o jogador N escolher
-  3. (jogo começa)
-
-Regras:
-  · Mínimo 2, máximo 4 jogadores
-  · Pelo menos 1 humano (Jogador 1 sempre humano)
-  · Cada jogador pode escolher um personagem específico ou "Aleatório"
-  · Personagens já escolhidos ficam marcados mas ainda selecionáveis
-    (permite que dois jogadores usem o mesmo rosto, se quiserem)
 """
-
 import pygame
-import os
 import random
 import constants as C
-from constants import (
-    W, H, BG, PC, PL, PD, PN,
-    DGRAY, WHITE, LGRAY,
-    CHARACTER_CATALOG, PLAYER_CHOICES,
-)
 from piece import Player
 
 pygame.font.init()
 
-# ── Fontes ────────────────────────────────────────────────────────────────────
-def _lf(size, bold=False):
+_font_cache = {}
+
+def _load_font(size, bold=False):
+    key = (size, bold)
+    if key in _font_cache:
+        return _font_cache[key]
     for name in ("Fredoka One", "Nunito", "Varela Round",
                  "Comic Sans MS", "Arial Rounded MT Bold", "Arial"):
         try:
-            return pygame.font.SysFont(name, size, bold=bold)
+            f = pygame.font.SysFont(name, size, bold=bold)
+            _font_cache[key] = f
+            return f
         except Exception:
             pass
-    return pygame.font.SysFont(None, size, bold=bold)
+    f = pygame.font.SysFont("Arial", size, bold=bold)
+    _font_cache[key] = f
+    return f
 
-F_TITLE = _lf(42, bold=True)
-F_BIG   = _lf(32, bold=True)
-F_MED   = _lf(22, bold=True)
-F_SM    = _lf(17, bold=True)
-F_XSM   = _lf(13)
 
-# ── Paleta ────────────────────────────────────────────────────────────────────
-_INK      = (52,  42,  76)
-_PANEL    = (36,  26,  64)
-_CARD_I   = (54,  42,  86)
-_HINT     = (255, 222,  60)
-_DIM      = (125, 112, 158)
-_TAKEN    = (80,  68, 110)   # fundo de personagem já escolhido
-_GREEN    = (45,  168,  45)
-_GREEN_D  = (20,  110,  20)
-_RED      = (168,  45,  45)
-
-# ── Utilidades ────────────────────────────────────────────────────────────────
 def _txt(surf, text, font, color, cx, cy, anchor="c"):
     img = font.render(str(text), True, color)
     r   = img.get_rect()
-    if   anchor == "c":  r.center   = (cx, cy)
-    elif anchor == "tl": r.topleft  = (cx, cy)
-    elif anchor == "tc": r.midtop   = (cx, cy)
+    if anchor == "c":   r.center   = (cx, cy)
+    elif anchor == "tl": r.topleft = (cx, cy)
+    elif anchor == "tc": r.midtop  = (cx, cy)
     elif anchor == "tr": r.topright = (cx, cy)
     surf.blit(img, r)
 
-def _sh(c, a=40):
-    return (max(c[0]-a,0), max(c[1]-a,0), max(c[2]-a,0))
 
-def _btn(surf, label, font, rx, ry, rw, rh, bg, border, text_col=WHITE, radius=10):
-    """Desenha um botão flat com sombra e retorna o Rect."""
-    rect = pygame.Rect(rx, ry, rw, rh)
-    sh   = rect.move(0, 3)
-    pygame.draw.rect(surf, _sh(bg, 50), sh,   border_radius=radius)
-    pygame.draw.rect(surf, bg,          rect, border_radius=radius)
-    pygame.draw.rect(surf, border,      rect, 2, border_radius=radius)
-    pygame.draw.rect(surf, _INK,        rect, 1, border_radius=radius)
-    _txt(surf, label, font, text_col, rect.centerx, rect.centery)
-    return rect
+# ── Cache de imagens de personagens ──────────────────────────────────────────
+_CHAR_IMG_CACHE = {}
 
-# ── Cache de imagens ──────────────────────────────────────────────────────────
-_IMG_CACHE: dict = {}
-
-def _load_char_img(key: str, size: int) -> pygame.Surface:
-    cache_key = (key, size)
-    if cache_key in _IMG_CACHE:
-        return _IMG_CACHE[cache_key]
-
+def _get_char_img(slug, size):
+    key = (slug, size)
+    if key in _CHAR_IMG_CACHE:
+        return _CHAR_IMG_CACHE[key]
+    import os
     surf = pygame.Surface((size, size), pygame.SRCALPHA)
-    path = os.path.join("images", f"{key}.png")
+    path = os.path.join("images", f"{slug}.png")
     try:
-        img  = pygame.image.load(path).convert_alpha()
-        w, h = img.get_size()
-        sc   = min(size / w, size / h)
-        img  = pygame.transform.smoothscale(img, (int(w*sc), int(h*sc)))
-        ox   = (size - img.get_width())  // 2
-        oy   = (size - img.get_height()) // 2
-        surf.blit(img, (ox, oy))
+        img = pygame.image.load(path).convert_alpha()
+        ow, oh = img.get_size()
+        scale  = min(size / ow, size / oh)
+        nw, nh = int(ow * scale), int(oh * scale)
+        img    = pygame.transform.smoothscale(img, (nw, nh))
+        surf.blit(img, ((size - nw) // 2, (size - nh) // 2))
     except Exception:
-        # Placeholder colorido se a imagem não existir
-        pygame.draw.rect(surf, (80, 70, 100), (0, 0, size, size), border_radius=size//4)
-        _txt(surf, key[:2].upper(), F_SM, WHITE, size//2, size//2)
-
-    _IMG_CACHE[cache_key] = surf
+        # fallback: círculo colorido com inicial
+        pygame.draw.circle(surf, (80, 80, 120), (size//2, size//2), size//2 - 2)
+    _CHAR_IMG_CACHE[key] = surf
     return surf
 
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ── Constantes visuais ────────────────────────────────────────────────────────
+_INK      = (52,  42,  76)
+_BG       = C.BG
+_PANEL    = (36,  26,  64)
+_EDGE     = (72,  58, 112)
+_CARD_ACT = (62,  52,  98)
+_CARD_OFF = (32,  24,  52)
+_GOLD     = (255, 220,  30)
+_DIM      = (110, 100, 140)
+_WHITE    = C.WHITE
+
+
 class Menu:
     def __init__(self):
-        self.n_players = 2
-        # "human" ou "cpu" para cada slot 0-3
-        self.types     = ["human", "cpu", "cpu", "cpu"]
-        # Chave do personagem escolhido (None = aleatório)
-        self.choices   = [None, None, None, None]
+        self.n_players   = 2
+        # "human" ou "cpu"
+        self.types       = ["human", "cpu", "cpu", "cpu"]
+        # slug do personagem escolhido, ou None = aleatório
+        self.choices     = [None, None, None, None]
+        # Tela: "main" ou "picker" (seleção de personagem para slot picker_slot)
+        self.screen      = "main"
+        self.picker_slot = 0
+        # scroll na grade de personagens
+        self.picker_scroll = 0
+        # hover tracking
+        self._hover      = None
 
-        # Tela atual: "setup" | "pick" (galeria)
-        self.screen    = "setup"
-        self.pick_slot = 0          # qual jogador está escolhendo
-        self.scroll_y  = 0          # scroll da galeria
-        self._gallery_rects = []    # [(char_idx, Rect)] para hit-test
+    # ── Layout ────────────────────────────────────────────────────────────────
 
-    # ── API pública ───────────────────────────────────────────────────────────
+    def _L(self):
+        W = C.W; H = C.H; cx = W // 2
+        sc = min(W / 960, H / 720)
+        return dict(
+            W=W, H=H, cx=cx, sc=sc,
+            F_BIG  = _load_font(max(16, int(40 * sc)), bold=True),
+            F_MED  = _load_font(max(13, int(24 * sc)), bold=True),
+            F_SM   = _load_font(max(11, int(18 * sc)), bold=True),
+            F_XSM  = _load_font(max(9,  int(14 * sc))),
+        )
+
+    # ── TELA PRINCIPAL ────────────────────────────────────────────────────────
+
     def draw(self, surf: pygame.Surface):
-        surf.fill(BG)
-        if self.screen == "setup":
-            self._draw_setup(surf)
+        if self.screen == "picker":
+            self._draw_picker(surf)
         else:
-            self._draw_gallery(surf)
+            self._draw_main(surf)
 
-    def handle(self, event) -> str | None:
-        """Retorna 'start' quando o jogo deve começar."""
-        if self.screen == "setup":
-            return self._handle_setup(event)
-        else:
-            return self._handle_gallery(event)
+    def _draw_main(self, surf: pygame.Surface):
+        L  = self._L()
+        W  = L['W']; H = L['H']; cx = L['cx']; sc = L['sc']
+        F_BIG = L['F_BIG']; F_MED = L['F_MED']
+        F_SM  = L['F_SM'];  F_XSM = L['F_XSM']
 
-    def make_game(self):
-        """Finaliza escolhas aleatórias e cria o Game."""
-        from game import Game
-
-        used = set(c for c in self.choices[:self.n_players] if c is not None)
-        available = [ch["key"] for ch in CHARACTER_CATALOG]
-
-        # Resolve aleatórios — preferindo não repetir, mas sem bloquear
-        for i in range(self.n_players):
-            if self.choices[i] is None:
-                pool = [k for k in available if k not in used] or available
-                chosen = random.choice(pool)
-                self.choices[i] = chosen
-                used.add(chosen)
-
-        # Atualiza globals em constants para que renderer.py use os valores certos
-        for i in range(self.n_players):
-            C.PLAYER_CHOICES[i] = self.choices[i]
-            # Atualiza o nome de exibição com o nome real do personagem
-            char = next((ch for ch in CHARACTER_CATALOG
-                         if ch["key"] == self.choices[i]), None)
-            C.PN[i] = char["name"] if char else f"Jogador {i+1}"
-
-        players = []
-        for i in range(self.n_players):
-            players.append(Player(i, self.types[i] == "human"))
-        return Game(players)
-
-    # ── Tela 1: Setup ─────────────────────────────────────────────────────────
-    def _draw_setup(self, surf: pygame.Surface):
-        cx = W // 2
+        surf.fill(_BG)
 
         # Título
-        _txt(surf, "🎲  L U D O", F_TITLE, _HINT, cx, 55)
-        _txt(surf, "Configuração da Partida", F_SM, _DIM, cx, 102)
+        title_y = max(38, int(H * 0.07))
+        _txt(surf, "LUDO", F_BIG, _GOLD, cx, title_y)
+        _txt(surf, "Configuração da Partida", F_SM, _DIM, cx, title_y + int(40 * sc))
 
-        # ── Nº de jogadores ──────────────────────────────────────────────────
-        by = 148
-        _txt(surf, "Número de jogadores:", F_SM, WHITE, cx - 80, by)
+        # ── Número de jogadores ───────────────────────────────────────────────
+        ny     = title_y + int(90 * sc)
+        btn_sz = max(22, int(30 * sc))
+        lbl_x  = cx - int(110 * sc)
+        num_x  = cx + int(40 * sc)
+        bx_up  = cx + int(80 * sc)
+        bx_dn  = cx + int(116 * sc)
 
-        # Botões – e +
-        bw, bh = 36, 36
-        self._btn_minus = _btn(surf, "–", F_BIG, cx + 46, by - bh//2,
-                               bw, bh, _RED, _sh(_RED))
-        self._btn_plus  = _btn(surf, "+", F_BIG, cx + 90, by - bh//2,
-                               bw, bh, _GREEN, _sh(_GREEN))
-        _txt(surf, str(self.n_players), F_BIG, _HINT, cx + 22, by)
+        _txt(surf, "Nº de jogadores:", F_SM, _WHITE, lbl_x, ny, anchor="c")
+        _txt(surf, str(self.n_players), F_BIG, _GOLD, num_x, ny)
 
-        # ── Cards de jogadores ───────────────────────────────────────────────
-        self._player_rows = {}   # slot → (toggle_rect, pick_rect)
-        card_w, card_h = 560, 68
-        card_x = cx - card_w // 2
+        for label, bx, col in [("▲", bx_up, (50,160,60)), ("▼", bx_dn, (180,50,50))]:
+            pygame.draw.rect(surf, col,
+                             (bx - btn_sz//2, ny - btn_sz//2, btn_sz, btn_sz),
+                             border_radius=6)
+            _txt(surf, label, F_XSM, _WHITE, bx, ny)
+
+        # ── Cards dos slots ───────────────────────────────────────────────────
+        card_y0  = ny + int(50 * sc)
+        card_gap = max(70, int(H * 0.115))
+        card_w   = max(320, int(W * 0.40))
+        card_h   = max(62, int(H * 0.095))
+        card_x   = cx - card_w // 2
+        img_sz   = int(card_h * 0.78)
 
         for i in range(4):
-            y = 186 + i * 80
+            y   = card_y0 + i * card_gap
+            act = i < self.n_players
 
-            active = (i < self.n_players)
-            alpha_color = WHITE if active else (60, 55, 80)
-            bg_color = (50, 40, 78) if active else (32, 26, 52)
+            bg_col = _CARD_ACT if act else _CARD_OFF
+            pygame.draw.rect(surf, bg_col, (card_x, y, card_w, card_h), border_radius=12)
+            if act:
+                pygame.draw.rect(surf, C.PC[i], (card_x, y, card_w, card_h), 3, border_radius=12)
+            else:
+                pygame.draw.rect(surf, _EDGE,   (card_x, y, card_w, card_h), 1, border_radius=12)
 
-            pygame.draw.rect(surf, bg_color,   (card_x, y, card_w, card_h), border_radius=12)
-            if active:
-                pygame.draw.rect(surf, PC[i], (card_x, y, card_w, card_h), 2, border_radius=12)
-            pygame.draw.rect(surf, _INK,       (card_x, y, card_w, card_h), 1, border_radius=12)
-
-            # Número do jogador
-            circle_col = PC[i] if active else (60, 52, 85)
-            pygame.draw.circle(surf, circle_col, (card_x + 30, y + card_h//2), 18)
-            _txt(surf, str(i+1), F_MED, WHITE, card_x + 30, y + card_h//2)
-
-            if not active:
-                _txt(surf, f"Slot {i+1} — inativo", F_XSM, (70, 65, 95),
-                     card_x + card_w//2, y + card_h//2)
+            if not act:
+                _txt(surf, f"Jogador {i+1} — desativado", F_XSM, _DIM, cx, y + card_h//2)
                 continue
 
-            # Nome/preview do personagem escolhido
-            char_key = self.choices[i]
-            if char_key:
-                char = next((c for c in CHARACTER_CATALOG if c["key"] == char_key), None)
-                char_label = char["name"] if char else char_key
-                # Miniatura
-                thumb = _load_char_img(char_key, 46)
-                surf.blit(thumb, (card_x + 56, y + card_h//2 - 23))
-                _txt(surf, char_label, F_SM, alpha_color, card_x + 130, y + card_h//2)
+            # Avatar
+            slug = self.choices[i]
+            display_slug = slug if slug else C.CHARACTER_ROSTER[0][0]
+            img  = _get_char_img(display_slug, img_sz)
+            # circle clip
+            img_x = card_x + int(card_h * 0.1)
+            img_y = y + (card_h - img_sz) // 2
+            surf.blit(img, (img_x, img_y))
+
+            # Nome do personagem
+            char_name = C.CHARACTER_NAMES.get(slug, "Aleatório") if slug else "Aleatório 🎲"
+            text_x    = img_x + img_sz + max(10, int(12 * sc))
+            _txt(surf, f"Jogador {i+1}", F_XSM, C.PL[i], text_x, y + int(card_h * 0.28), anchor="tl")
+            _txt(surf, char_name, F_SM, _WHITE, text_x, y + int(card_h * 0.54), anchor="tl")
+
+            # Tipo (humano/cpu)
+            t      = self.types[i]
+            type_w = max(74, int(card_w * 0.22))
+            type_h = max(28, int(card_h * 0.44))
+            type_x = card_x + card_w - type_w - max(8, int(10 * sc))
+            type_y = y + int(card_h * 0.15)
+            t_col  = (40, 150, 50) if t == "human" else (150, 45, 45)
+            pygame.draw.rect(surf, t_col, (type_x, type_y, type_w, type_h), border_radius=8)
+            _txt(surf, "Humano" if t == "human" else "CPU", F_XSM, _WHITE,
+                 type_x + type_w//2, type_y + type_h//2)
+
+            # Botão "Escolher personagem"
+            pick_w = max(130, int(card_w * 0.38))
+            pick_h = max(24, int(card_h * 0.38))
+            pick_x = card_x + card_w - pick_w - max(8, int(10 * sc))
+            pick_y = type_y + type_h + max(4, int(5 * sc))
+            pygame.draw.rect(surf, (55, 45, 90), (pick_x, pick_y, pick_w, pick_h), border_radius=7)
+            pygame.draw.rect(surf, _EDGE, (pick_x, pick_y, pick_w, pick_h), 1, border_radius=7)
+            _txt(surf, "🎨 Escolher personagem", F_XSM, (180, 170, 220),
+                 pick_x + pick_w//2, pick_y + pick_h//2)
+
+        # ── Nota: jogador 0 sempre humano ────────────────────────────────────
+        note_y = card_y0 - int(18 * sc)
+        _txt(surf, "Jogador 1 é sempre Humano", F_XSM, _DIM, cx, note_y)
+
+        # ── Botão INICIAR ─────────────────────────────────────────────────────
+        btn_w = max(180, int(W * 0.21))
+        btn_h = max(44,  int(H * 0.075))
+        btn_x = cx - btn_w // 2
+        btn_y = H - max(70, int(H * 0.12))
+        pygame.draw.rect(surf, (38, 140, 50), (btn_x, btn_y, btn_w, btn_h), border_radius=14)
+        pygame.draw.rect(surf, (80, 200, 90), (btn_x, btn_y, btn_w, btn_h), 2, border_radius=14)
+        _txt(surf, "▶  INICIAR", F_MED, _WHITE, cx, btn_y + btn_h//2)
+
+        _txt(surf, "↑↓ = nº de jogadores  •  ENTER = iniciar",
+             F_XSM, _DIM, cx, H - max(22, int(H * 0.04)))
+
+    # ── TELA PICKER ───────────────────────────────────────────────────────────
+
+    def _draw_picker(self, surf: pygame.Surface):
+        L  = self._L()
+        W  = L['W']; H = L['H']; cx = L['cx']; sc = L['sc']
+        F_BIG = L['F_BIG']; F_MED = L['F_MED']
+        F_SM  = L['F_SM'];  F_XSM = L['F_XSM']
+        i = self.picker_slot
+
+        surf.fill(_BG)
+
+        # Header
+        hdr_h = max(54, int(H * 0.09))
+        pygame.draw.rect(surf, _PANEL, (0, 0, W, hdr_h))
+        pygame.draw.rect(surf, C.PC[i], (0, 0, W, hdr_h), 3)
+        _txt(surf, f"Jogador {i+1} — Escolha seu personagem",
+             F_MED, _WHITE, cx, hdr_h//2)
+
+        # Botão voltar
+        back_w = max(80, int(W * 0.09))
+        back_h = max(30, int(hdr_h * 0.58))
+        back_x = max(10, int(W * 0.012))
+        back_y = (hdr_h - back_h) // 2
+        pygame.draw.rect(surf, (70, 55, 110), (back_x, back_y, back_w, back_h), border_radius=8)
+        pygame.draw.rect(surf, _EDGE, (back_x, back_y, back_w, back_h), 1, border_radius=8)
+        _txt(surf, "← Voltar", F_XSM, _WHITE, back_x + back_w//2, back_y + back_h//2)
+
+        # Grade de personagens
+        cols   = max(3, min(6, int(W / max(120, int(130 * sc)))))
+        card_w = (W - max(24, int(W * 0.03)) * 2) // cols
+        card_h = max(110, int(card_w * 1.2))
+        img_sz = max(60, int(card_h * 0.62))
+        pad_x  = (W - cols * card_w) // 2
+        grid_y = hdr_h + max(10, int(H * 0.015))
+
+        # Opção "Aleatório" sempre na primeira posição
+        items = [None] + [slug for slug, _ in C.CHARACTER_ROSTER]
+        current = self.choices[i]
+
+        # Scrolling: quantas linhas cabem
+        rows_visible = max(1, (H - grid_y - max(50, int(H * 0.08))) // card_h)
+        max_scroll   = max(0, (len(items) + cols - 1) // cols - rows_visible)
+        self.picker_scroll = max(0, min(self.picker_scroll, max_scroll))
+
+        for idx, slug in enumerate(items):
+            col_idx = idx % cols
+            row_idx = idx // cols - self.picker_scroll
+            if row_idx < 0 or row_idx >= rows_visible:
+                continue
+
+            cx_ = pad_x + col_idx * card_w + card_w // 2
+            cy_ = grid_y + row_idx * card_h
+
+            selected = (slug == current)
+            hover    = (self._hover == idx)
+
+            bg = C.PC[i] if selected else ((72, 58, 106) if hover else (44, 34, 72))
+            border = _GOLD if selected else (C.PL[i] if hover else _EDGE)
+
+            pygame.draw.rect(surf, bg,
+                             (pad_x + col_idx * card_w + 4, cy_ + 4, card_w - 8, card_h - 8),
+                             border_radius=12)
+            pygame.draw.rect(surf, border,
+                             (pad_x + col_idx * card_w + 4, cy_ + 4, card_w - 8, card_h - 8),
+                             2 if not selected else 3, border_radius=12)
+
+            if slug is None:
+                # Aleatório
+                emoji_font = _load_font(max(22, int(36 * sc)))
+                _txt(surf, "🎲", emoji_font, _WHITE, cx_, cy_ + card_h // 3)
+                _txt(surf, "Aleatório", F_XSM, _GOLD if selected else _WHITE,
+                     cx_, cy_ + int(card_h * 0.7))
             else:
-                # Ícone "?" aleatório
-                pygame.draw.circle(surf, (70, 60, 100), (card_x + 79, y + card_h//2), 23)
-                _txt(surf, "?", F_BIG, _DIM, card_x + 79, y + card_h//2)
-                _txt(surf, "Aleatório", F_SM, _DIM, card_x + 130, y + card_h//2)
+                img = _get_char_img(slug, img_sz)
+                surf.blit(img, (cx_ - img_sz//2, cy_ + int(card_h * 0.06)))
+                name = C.CHARACTER_NAMES.get(slug, slug)
+                _txt(surf, name, F_XSM, _GOLD if selected else _WHITE,
+                     cx_, cy_ + int(card_h * 0.78))
 
-            # Botão "Escolher"
-            pick_rect = _btn(surf, "👤 Escolher", F_XSM,
-                             card_x + card_w - 170, y + 14, 120, 34,
-                             (70, 55, 110), (100, 80, 150))
+            if selected:
+                _txt(surf, "✓", F_SM, _GOLD, cx_ + card_w//2 - 16, cy_ + 8, anchor="c")
 
-            # Botão Humano/CPU (só slots 1-3; slot 0 sempre humano)
-            if i == 0:
-                _txt(surf, "Humano (fixo)", F_XSM, PL[0],
-                     card_x + card_w - 46, y + card_h//2)
-                toggle_rect = None
-            else:
-                t   = self.types[i]
-                col = _GREEN if t == "human" else _RED
-                toggle_rect = _btn(surf,
-                                   "Humano" if t == "human" else "  CPU  ",
-                                   F_XSM,
-                                   card_x + card_w - 46 - 80, y + 14,
-                                   80, 34, col, _sh(col))
+        # Scroll hints
+        if self.picker_scroll > 0:
+            _txt(surf, "▲ rolar para cima", F_XSM, _DIM, cx, grid_y + 8)
+        if self.picker_scroll < max_scroll:
+            _txt(surf, "▼ mais personagens", F_XSM, _DIM, cx, H - max(28, int(H * 0.045)))
 
-            self._player_rows[i] = (toggle_rect, pick_rect)
+        # Botão confirmar
+        conf_w = max(160, int(W * 0.19))
+        conf_h = max(40,  int(H * 0.068))
+        conf_x = cx - conf_w // 2
+        conf_y = H - max(60, int(H * 0.1))
+        pygame.draw.rect(surf, (38, 140, 50), (conf_x, conf_y, conf_w, conf_h), border_radius=12)
+        pygame.draw.rect(surf, (80, 200, 90), (conf_x, conf_y, conf_w, conf_h), 2, border_radius=12)
+        _txt(surf, "✓  Confirmar", F_MED, _WHITE, cx, conf_y + conf_h//2)
 
-        # ── Botão Iniciar ─────────────────────────────────────────────────────
-        self._btn_start = _btn(surf, "▶   INICIAR", F_MED,
-                               cx - 110, H - 88, 220, 52,
-                               _GREEN, _GREEN_D, radius=14)
+        # Store rects for hit-testing (used in handle)
+        self._picker_meta = dict(
+            items=items, cols=cols, card_w=card_w, card_h=card_h,
+            pad_x=pad_x, grid_y=grid_y, rows_visible=rows_visible,
+            back=(back_x, back_y, back_w, back_h),
+            conf=(conf_x, conf_y, conf_w, conf_h),
+            hdr_h=hdr_h,
+        )
 
-        _txt(surf, "Clique em 👤 Escolher para selecionar o personagem de cada jogador",
-             F_XSM, _DIM, cx, H - 30)
+    # ── Eventos ───────────────────────────────────────────────────────────────
 
-    def _handle_setup(self, event) -> str | None:
+    def handle(self, event) -> "str | None":
+        if self.screen == "picker":
+            return self._handle_picker(event)
+        return self._handle_main(event)
+
+    def _handle_main(self, event) -> "str | None":
+        L  = self._L()
+        W  = L['W']; H = L['H']; cx = L['cx']; sc = L['sc']
+
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_UP:
                 self.n_players = min(4, self.n_players + 1)
@@ -266,213 +342,160 @@ class Menu:
         if event.type == pygame.MOUSEBUTTONDOWN:
             mx, my = event.pos
 
-            if hasattr(self, "_btn_plus") and self._btn_plus.collidepoint(mx, my):
+            # Botões ▲▼ número de jogadores
+            ny     = max(38, int(H * 0.07)) + int(90 * sc)
+            btn_sz = max(22, int(30 * sc))
+            bx_up  = cx + int(80 * sc)
+            bx_dn  = cx + int(116 * sc)
+            if abs(mx - bx_up) < btn_sz//2 and abs(my - ny) < btn_sz//2:
                 self.n_players = min(4, self.n_players + 1)
-                return None
-            if hasattr(self, "_btn_minus") and self._btn_minus.collidepoint(mx, my):
+            if abs(mx - bx_dn) < btn_sz//2 and abs(my - ny) < btn_sz//2:
                 self.n_players = max(2, self.n_players - 1)
-                return None
-            if hasattr(self, "_btn_start") and self._btn_start.collidepoint(mx, my):
-                return "start"
 
-            for i, (toggle_rect, pick_rect) in self._player_rows.items():
-                if i >= self.n_players:
+            # Cards dos slots
+            card_y0  = ny + int(50 * sc)
+            card_gap = max(70, int(H * 0.115))
+            card_w   = max(320, int(W * 0.40))
+            card_h   = max(62, int(H * 0.095))
+            card_x   = cx - card_w // 2
+
+            for i in range(self.n_players):
+                y = card_y0 + i * card_gap
+                if not (card_x <= mx <= card_x + card_w and y <= my <= y + card_h):
                     continue
-                if pick_rect and pick_rect.collidepoint(mx, my):
-                    self.pick_slot = i
-                    self.screen    = "pick"
-                    self.scroll_y  = 0
-                    return None
-                if toggle_rect and toggle_rect.collidepoint(mx, my):
-                    self.types[i] = "cpu" if self.types[i] == "human" else "human"
+
+                # Botão tipo (humano/cpu) — só para slots 1+
+                if i > 0:
+                    type_w = max(74, int(card_w * 0.22))
+                    type_h = max(28, int(card_h * 0.44))
+                    type_x = card_x + card_w - type_w - max(8, int(10 * sc))
+                    type_y = y + int(card_h * 0.15)
+                    if type_x <= mx <= type_x + type_w and type_y <= my <= type_y + type_h:
+                        self.types[i] = "cpu" if self.types[i] == "human" else "human"
+                        return None
+
+                # Botão escolher personagem
+                type_h = max(28, int(card_h * 0.44))
+                type_y = y + int(card_h * 0.15)
+                type_w = max(74, int(card_w * 0.22))
+                type_x = card_x + card_w - type_w - max(8, int(10 * sc))
+                pick_w = max(130, int(card_w * 0.38))
+                pick_h = max(24, int(card_h * 0.38))
+                pick_x = card_x + card_w - pick_w - max(8, int(10 * sc))
+                pick_y = type_y + type_h + max(4, int(5 * sc))
+                if pick_x <= mx <= pick_x + pick_w and pick_y <= my <= pick_y + pick_h:
+                    self.picker_slot   = i
+                    self.picker_scroll = 0
+                    self.screen        = "picker"
+                    self._hover        = None
                     return None
 
-        if event.type == pygame.MOUSEWHEEL:
-            pass  # sem scroll no setup
+            # Botão INICIAR
+            btn_w = max(180, int(W * 0.21))
+            btn_h = max(44,  int(H * 0.075))
+            btn_x = cx - btn_w // 2
+            btn_y = H - max(70, int(H * 0.12))
+            if btn_x <= mx <= btn_x + btn_w and btn_y <= my <= btn_y + btn_h:
+                return "start"
 
         return None
 
-    # ── Tela 2: Galeria de personagens ────────────────────────────────────────
-    _COLS      = 5
-    _THUMB     = 100   # tamanho da miniatura
-    _GAP       = 16
-    _GALL_TOP  = 110   # y onde começa a grelha
-    _GALL_BOT  = H - 70
+    def _handle_picker(self, event) -> "str | None":
+        if not hasattr(self, '_picker_meta'):
+            return None
+        m = self._picker_meta
+        items        = m['items']
+        cols         = m['cols']
+        card_w       = m['card_w']
+        card_h       = m['card_h']
+        pad_x        = m['pad_x']
+        grid_y       = m['grid_y']
+        rows_visible = m['rows_visible']
+        bx, by, bw, bh = m['back']
+        cx_, cy_, cw, ch = m['conf']
 
-    def _draw_gallery(self, surf: pygame.Surface):
-        slot  = self.pick_slot
-        cx    = W // 2
-        n     = len(CHARACTER_CATALOG)
-        cols  = self._COLS
-        th    = self._THUMB
-        gap   = self._GAP
-
-        total_w = cols * th + (cols - 1) * gap
-        start_x = cx - total_w // 2
-
-        # Cabeçalho
-        slot_col = PC[slot]
-        pygame.draw.rect(surf, (28, 20, 55), (0, 0, W, self._GALL_TOP - 4))
-        _txt(surf, f"Jogador {slot+1} — escolha seu personagem",
-             F_MED, slot_col, cx, 36)
-        _txt(surf, "Clique para escolher  •  ESC ou ← para voltar  •  scroll para rolar",
-             F_XSM, _DIM, cx, 68)
-
-        # Botão "Aleatório" no topo
-        self._btn_random = _btn(surf, "🎲  Aleatório (surpresa!)", F_SM,
-                                cx - 140, 84, 280, 34,
-                                (80, 60, 130), (110, 88, 170))
-
-        # Linha separadora
-        pygame.draw.line(surf, (60, 50, 90), (0, self._GALL_TOP - 4),
-                         (W, self._GALL_TOP - 4), 2)
-
-        # Área de scroll — clip para não vazar
-        clip = pygame.Rect(0, self._GALL_TOP, W, self._GALL_BOT - self._GALL_TOP)
-        surf.set_clip(clip)
-
-        self._gallery_rects = []
-        row_h = th + gap + 22   # thumb + gap + nome
-
-        # Total de linhas e altura de conteúdo
-        rows      = (n + cols - 1) // cols
-        content_h = rows * row_h + gap
-        max_scroll = max(0, content_h - (self._GALL_BOT - self._GALL_TOP))
-        self.scroll_y = max(0, min(self.scroll_y, max_scroll))
-
-        # Quais personagens já escolhidos por outros slots
-        taken_by = {}
-        for j in range(self.n_players):
-            if j != slot and self.choices[j]:
-                taken_by[self.choices[j]] = j
-
-        for idx, char in enumerate(CHARACTER_CATALOG):
-            col_i = idx % cols
-            row_i = idx // cols
-            cx_   = start_x + col_i * (th + gap) + th // 2
-            cy_   = self._GALL_TOP + row_i * row_h + th // 2 + gap // 2 - self.scroll_y
-
-            rect = pygame.Rect(cx_ - th//2, cy_ - th//2, th, th)
-
-            # Só desenha se visível
-            if rect.bottom < self._GALL_TOP or rect.top > self._GALL_BOT:
-                self._gallery_rects.append((idx, rect))
-                continue
-
-            # Estado visual
-            is_chosen = (self.choices[slot] == char["key"])
-            takenby   = taken_by.get(char["key"])
-
-            # Sombra do card
-            sh_rect = rect.move(0, 4)
-            pygame.draw.rect(surf, (15, 10, 35), sh_rect, border_radius=12)
-
-            # Fundo do card
-            if is_chosen:
-                bg_c  = PC[slot]
-                brd_c = WHITE
-            elif takenby is not None:
-                bg_c  = _TAKEN
-                brd_c = PL[takenby]
-            else:
-                bg_c  = (54, 42, 86)
-                brd_c = (80, 65, 120)
-
-            pygame.draw.rect(surf, bg_c,  rect, border_radius=12)
-            pygame.draw.rect(surf, brd_c, rect, 2, border_radius=12)
-
-            # Thumbnail
-            img = _load_char_img(char["key"], th - 8)
-            surf.blit(img, (rect.x + 4, rect.y + 4))
-
-            # Badge "já escolhido" por outro jogador
-            if takenby is not None and not is_chosen:
-                badge_r = pygame.Rect(rect.right - 22, rect.top - 2, 22, 22)
-                pygame.draw.circle(surf, PC[takenby],
-                                   badge_r.center, 11)
-                pygame.draw.circle(surf, WHITE, badge_r.center, 11, 2)
-                _txt(surf, str(takenby + 1), F_XSM, WHITE,
-                     badge_r.centerx, badge_r.centery)
-
-            # Check mark se selecionado
-            if is_chosen:
-                ck = pygame.Rect(rect.right - 22, rect.top - 2, 22, 22)
-                pygame.draw.circle(surf, _GREEN, ck.center, 11)
-                pygame.draw.circle(surf, WHITE,  ck.center, 11, 2)
-                _txt(surf, "✓", F_XSM, WHITE, ck.centerx, ck.centery)
-
-            # Nome abaixo
-            name_y = cy_ + th // 2 + 12
-            _txt(surf, char["name"], F_XSM,
-                 WHITE if (is_chosen or takenby is None) else _DIM,
-                 cx_, name_y)
-
-            self._gallery_rects.append((idx, rect))
-
-        surf.set_clip(None)
-
-        # Scrollbar discreta
-        if content_h > (self._GALL_BOT - self._GALL_TOP):
-            bar_h  = int((self._GALL_BOT - self._GALL_TOP) ** 2 / content_h)
-            bar_y  = self._GALL_TOP + int(
-                self.scroll_y * (self._GALL_BOT - self._GALL_TOP - bar_h) / max_scroll
-            ) if max_scroll else self._GALL_TOP
-            pygame.draw.rect(surf, (80, 68, 110),
-                             (W - 8, self._GALL_TOP, 6, self._GALL_BOT - self._GALL_TOP),
-                             border_radius=3)
-            pygame.draw.rect(surf, (140, 120, 180),
-                             (W - 8, bar_y, 6, bar_h), border_radius=3)
-
-        # Botão Voltar
-        self._btn_back = _btn(surf, "← Voltar", F_SM,
-                              20, H - 56, 130, 40,
-                              (60, 48, 95), (90, 72, 140))
-
-        # Botão Confirmar (se já escolheu)
-        if self.choices[slot]:
-            char = next((c for c in CHARACTER_CATALOG
-                         if c["key"] == self.choices[slot]), None)
-            lbl  = f"✓ Confirmar {char['name']}" if char else "✓ Confirmar"
-            self._btn_confirm = _btn(surf, lbl, F_SM,
-                                     W - 230, H - 56, 210, 40,
-                                     _GREEN, _GREEN_D)
-        else:
-            self._btn_confirm = None
-
-    def _handle_gallery(self, event) -> str | None:
-        if event.type == pygame.KEYDOWN:
-            if event.key in (pygame.K_ESCAPE, pygame.K_LEFT):
-                self.screen = "setup"
-            elif event.key == pygame.K_RETURN:
-                self.screen = "setup"
+        if event.type == pygame.MOUSEMOTION:
+            mx, my = event.pos
+            self._hover = self._picker_hit(mx, my, items, cols, card_w, card_h,
+                                           pad_x, grid_y, rows_visible)
 
         if event.type == pygame.MOUSEWHEEL:
-            self.scroll_y -= event.y * 30
-            return None
+            self.picker_scroll = max(0, self.picker_scroll - event.y)
+
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.screen = "main"
+            elif event.key in (pygame.K_UP, pygame.K_PAGEUP):
+                self.picker_scroll = max(0, self.picker_scroll - 1)
+            elif event.key in (pygame.K_DOWN, pygame.K_PAGEDOWN):
+                self.picker_scroll += 1
+            elif event.key == pygame.K_RETURN:
+                self.screen = "main"
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             mx, my = event.pos
 
-            if hasattr(self, "_btn_back") and self._btn_back.collidepoint(mx, my):
-                self.screen = "setup"
+            # Voltar
+            if bx <= mx <= bx + bw and by <= my <= by + bh:
+                self.screen = "main"
                 return None
 
-            if hasattr(self, "_btn_confirm") and self._btn_confirm and \
-                    self._btn_confirm.collidepoint(mx, my):
-                self.screen = "setup"
+            # Confirmar
+            if cx_ <= mx <= cx_ + cw and cy_ <= my <= cy_ + ch:
+                self.screen = "main"
                 return None
 
-            if hasattr(self, "_btn_random") and self._btn_random.collidepoint(mx, my):
-                self.choices[self.pick_slot] = None
-                self.screen = "setup"
-                return None
-
-            for idx, rect in self._gallery_rects:
-                if rect.collidepoint(mx, my):
-                    char = CHARACTER_CATALOG[idx]
-                    self.choices[self.pick_slot] = char["key"]
-                    # Confirma imediatamente e volta
-                    self.screen = "setup"
-                    return None
+            # Clique em card de personagem
+            hit = self._picker_hit(mx, my, items, cols, card_w, card_h,
+                                   pad_x, grid_y, rows_visible)
+            if hit is not None:
+                self.choices[self.picker_slot] = items[hit]
 
         return None
+
+    def _picker_hit(self, mx, my, items, cols, card_w, card_h, pad_x, grid_y, rows_visible):
+        for idx in range(len(items)):
+            col_idx = idx % cols
+            row_idx = idx // cols - self.picker_scroll
+            if row_idx < 0 or row_idx >= rows_visible:
+                continue
+            rx = pad_x + col_idx * card_w + 4
+            ry = grid_y + row_idx * card_h + 4
+            rw = card_w - 8
+            rh = card_h - 8
+            if rx <= mx <= rx + rw and ry <= my <= ry + rh:
+                return idx
+        return None
+
+    # ── Construir Game ────────────────────────────────────────────────────────
+
+    def make_game(self):
+        from game import Game
+
+        # Resolve personagens aleatórios
+        used_slugs = set(s for s in self.choices[:self.n_players] if s is not None)
+        available  = [slug for slug, _ in C.CHARACTER_ROSTER if slug not in used_slugs]
+        random.shuffle(available)
+
+        final_choices = {}
+        for i in range(self.n_players):
+            slug = self.choices[i]
+            if slug is None:
+                if available:
+                    slug = available.pop(0)
+                else:
+                    slug = C.CHARACTER_ROSTER[i % len(C.CHARACTER_ROSTER)][0]
+            final_choices[i] = slug
+
+        # Atualiza os globais de constants
+        C.PLAYER_CHOICES.clear()
+        C.PLAYER_DISPLAY_NAMES.clear()
+        for i in range(self.n_players):
+            slug = final_choices[i]
+            C.PLAYER_CHOICES[i]       = slug
+            C.PLAYER_DISPLAY_NAMES[i] = C.CHARACTER_NAMES.get(slug, slug.capitalize())
+
+        players = [Player(0, True)]
+        for i in range(1, self.n_players):
+            players.append(Player(i, self.types[i] == "human"))
+        return Game(players)

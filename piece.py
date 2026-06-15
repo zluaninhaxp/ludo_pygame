@@ -3,7 +3,6 @@ piece.py — Classe Piece (peça individual) e Player (jogador).
 """
 from constants import MPATH, ENTRY, HSTRETCH, CENTER, YARDS, steps_to_px
 
-
 class Piece:
     """
     Representa uma peça no tabuleiro.
@@ -14,9 +13,9 @@ class Piece:
       'done'   — chegou ao centro, fora do jogo
 
     Passos:
-      0-51  → caminho principal  (MPATH[(ENTRY[pid]+steps)%52])
-      52-56 → corredor de chegada (HSTRETCH[pid][steps-52])
-      57    → centro (done)
+      0-50  → caminho principal
+      51-55 → corredor de chegada colorido
+      56    → centro (vitória)
     """
 
     def __init__(self, pid: int, idx: int):
@@ -25,51 +24,43 @@ class Piece:
         self.state = "home"
         self.steps = 0
 
-    # ── Propriedades ──────────────────────────────────────────────────────────
-
     @property
     def grid(self):
-        """Retorna (col, row) atual ou None se não estiver ativo."""
         if self.state != "active":
             return None
-        if self.steps <= 51:
+        if self.steps <= 50:
             return MPATH[(ENTRY[self.pid] + self.steps) % 52]
-        hs = self.steps - 52
+        hs = self.steps - 51
         if hs < 5:
             return HSTRETCH[self.pid][hs]
         return CENTER
 
     @property
     def pixel(self):
-        """Retorna posição pixel central atual."""
         if self.state == "home":
             return YARDS[self.pid][self.idx]
         if self.state == "done":
-            return steps_to_px(self.pid, 57)
+            return steps_to_px(self.pid, 56)
         return steps_to_px(self.pid, self.steps)
-
-    # ── Lógica de movimento ───────────────────────────────────────────────────
 
     def can_move(self, roll: int) -> bool:
         if self.state == "done":
             return False
         if self.state == "home":
             return roll == 6
-        return (self.steps + roll) <= 57
+        return (self.steps + roll) <= 56
 
     def move(self, roll: int):
-        """Aplica o movimento. Se estava em casa, entra no tabuleiro (steps=0)."""
         if self.state == "home":
             self.state = "active"
             self.steps = 0
             return
         self.steps += roll
-        if self.steps >= 57:
-            self.steps = 57
+        if self.steps >= 56:
+            self.steps = 56
             self.state = "done"
 
     def send_home(self):
-        """Envia a peça de volta para a base (captura)."""
         self.state = "home"
         self.steps = 0
 
@@ -79,15 +70,6 @@ class Piece:
 
 
 class Player:
-    """
-    Representa um jogador com 4 peças.
-
-    Atributos:
-      pid   — id (0-3)
-      human — True se humano, False se CPU
-      done  — True quando todas as peças chegaram ao centro
-    """
-
     def __init__(self, pid: int, human: bool):
         self.pid    = pid
         self.human  = human
@@ -95,7 +77,6 @@ class Player:
         self.done   = False
 
     def movable(self, roll: int) -> list:
-        """Retorna lista de peças que podem se mover com este dado."""
         return [p for p in self.pieces if p.can_move(roll)]
 
     def all_done(self) -> bool:

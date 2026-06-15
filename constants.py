@@ -1,38 +1,13 @@
 """
 constants.py — Layout, paleta e caminhos do Ludo.
-
-Grade 15x15 (col c=0..14, row r=0..14):
-  Vermelho  topo-esquerda   cols 0-5  / rows 0-5
-  Verde     topo-direita    cols 9-14 / rows 0-5
-  Azul      baixo-direita   cols 9-14 / rows 9-14
-  Amarelo   baixo-esquerda  cols 0-5  / rows 9-14
-  Corredor central cols 6-8, rows 6-8
-
-Caminho principal 52 casas (sentido horário):
-  idx  0  entrada Vermelho  (1,6)
-  idx 13  entrada Verde     (8,1)
-  idx 26  entrada Azul      (13,8)
-  idx 39  entrada Amarelo   (6,13)
+Suporta redimensionamento dinâmico via resize(w, h).
 """
 
-W, H    = 960, 720
-SIDE_W  = 160
-BSIZE   = 660
+import pygame
 
-_AREA_LIVRE_W = W - SIDE_W
-BX = SIDE_W + (_AREA_LIVRE_W - BSIZE) // 2
-BY = (H - BSIZE) // 2
+FPS = 60
 
-CELL    = BSIZE // 15
-FPS     = 60
-
-# ── Escala da Base ─────────────────────────────────────────────────────────────
-BASE_SCALE  = 0.82
-BASE_SZ     = int(CELL * 6 * BASE_SCALE)
-BASE_OFFSET = (CELL * 6 - BASE_SZ) // 2
-B_CELL      = BASE_SZ / 6.0
-
-# ── Paleta ─────────────────────────────────────────────────────────────────────
+# ── Paleta (estática) ─────────────────────────────────────────────────────────
 WHITE  = (255, 255, 255)
 BLACK  = (30,  28,  40)
 CREAM  = (255, 250, 235)
@@ -58,31 +33,33 @@ PD = {
     2: ( 35,  85, 175),
     3: (190, 135,  10),
 }
+PN = {0:"Vermelho", 1:"Verde", 2:"Azul", 3:"Amarelo"}
 
-# ── Nomes dos slots (agora dinâmico — sobrescrito pelo menu) ───────────────────
-# Estes são os defaults; o menu atualiza PN com o nome real do personagem.
-PN = {0: "Jogador 1", 1: "Jogador 2", 2: "Jogador 3", 3: "Jogador 4"}
-
-# ── Catálogo de personagens ────────────────────────────────────────────────────
-# Chave: nome do arquivo (sem .png) em images/
-# Valor: nome de exibição amigável
-# Adicione/remova entradas conforme suas imagens.
-CHARACTER_CATALOG = [
-    {"key": "caruzo",   "name": "Caruzo"},
-    {"key": "miguel",   "name": "Miguel"},
-    {"key": "darosa",   "name": "Da Rosa"},
-    {"key": "joaop",    "name": "João Pedro"},
+# ── Elenco de personagens disponíveis ────────────────────────────────────────
+CHARACTER_ROSTER = [
+    ("caruzo",   "Caruzo"),
+    ("miguel",   "Miguel"),
+    ("darosa",   "Da Rosa"),
+    ("joaop",    "João Pedro"),
 ]
 
-# Escolhas ativas (pid → key do personagem). Atualizado pelo menu antes do jogo.
+CHARACTER_NAMES = {slug: name for slug, name in CHARACTER_ROSTER}
+
 PLAYER_CHOICES = {
-    0: CHARACTER_CATALOG[0]["key"],
-    1: CHARACTER_CATALOG[1]["key"],
-    2: CHARACTER_CATALOG[2]["key"],
-    3: CHARACTER_CATALOG[3]["key"],
+    0: "caruzo",
+    1: "miguel",
+    2: "darosa",
+    3: "joaop"
 }
 
-# ── Caminho principal 52 casas ─────────────────────────────────────────────────
+PLAYER_DISPLAY_NAMES = {
+    0: "Caruzo",
+    1: "Miguel",
+    2: "Da Rosa",
+    3: "João P.",
+}
+
+# ── Caminho principal 52 casas (grade lógica) ─────────────────────
 MPATH = (
       [(c,6) for c in range(1,6)]
     + [(6,r) for r in range(5,-1,-1)]
@@ -98,10 +75,6 @@ MPATH = (
     + [(0,8),(0,7),(0,6)]
 )
 assert len(MPATH) == 52
-assert MPATH[0]  == (1,6)
-assert MPATH[13] == (8,1)
-assert MPATH[26] == (13,8)
-assert MPATH[39] == (6,13)
 
 ENTRY = {0:0, 1:13, 2:26, 3:39}
 
@@ -119,16 +92,41 @@ SAFE = {
     MPATH[26], MPATH[34], MPATH[39], MPATH[47],
 }
 
+# ── Variáveis de layout (recalculadas por resize) ────────────────────────────
+W      = 960
+H      = 720
+SIDE_W = 160
+BSIZE  = 660
+BX     = 170
+BY     = 30
+CELL   = 44
+
+BASE_SCALE  = 0.82
+BASE_SZ     = int(CELL * 6 * BASE_SCALE)
+BASE_OFFSET = (CELL * 6 - BASE_SZ) // 2
+B_CELL      = BASE_SZ / 6.0
+
+YARDS: dict = {}
+
+def _recalc_yards():
+    YARDS.clear()
+    YARDS.update({
+        0: _yard(0, 0),
+        1: _yard(9, 0),
+        2: _yard(9, 9),
+        3: _yard(0, 9),
+    })
+
 def _yard(oc, or_):
-    sz = CELL * 5.9
-    sobra = CELL * 6 - sz
+    sz     = CELL * 5.9
+    sobra  = CELL * 6 - sz
     offset_x = sobra if oc == 9 else 0
     offset_y = sobra if or_ == 9 else 0
     px = BX + oc * CELL + offset_x
     py = BY + or_ * CELL + offset_y
     cx_base = px + sz / 2
     cy_base = py + sz / 2
-    spread = 1.05
+    spread  = 1.05
     pts = []
     for dr in [-1, 1]:
         for dc in [-1, 1]:
@@ -137,20 +135,41 @@ def _yard(oc, or_):
             pts.append((int(cx_), int(cy_)))
     return pts
 
-YARDS = {
-    0: _yard(0, 0),
-    1: _yard(9, 0),
-    2: _yard(9, 9),
-    3: _yard(0, 9)
-}
-
 def gpx(col, row):
-    return (BX + col*CELL + CELL//2, BY + row*CELL + CELL//2)
+    return (BX + col * CELL + CELL // 2, BY + row * CELL + CELL // 2)
 
 def steps_to_px(pid, steps):
-    if steps <= 51:
-        return gpx(*MPATH[(ENTRY[pid]+steps)%52])
-    hs = steps - 52
+    # Correção da conversão de esquina
+    if steps <= 50:
+        return gpx(*MPATH[(ENTRY[pid] + steps) % 52])
+    hs = steps - 51
     if hs < 5:
         return gpx(*HSTRETCH[pid][hs])
     return gpx(*CENTER)
+
+# ── Função principal de redimensionamento ─────────────────────────────────────
+def resize(new_w: int, new_h: int):
+    global W, H, SIDE_W, BSIZE, BX, BY, CELL
+    global BASE_SCALE, BASE_SZ, BASE_OFFSET, B_CELL
+
+    W = new_w
+    H = new_h
+
+    SIDE_W = max(120, min(200, int(new_w * 0.167)))
+    area_w = new_w - SIDE_W
+    area_h = new_h
+    margin = max(16, int(min(area_w, area_h) * 0.03))
+    BSIZE  = (min(area_w, area_h) - margin * 2) // 15 * 15  
+
+    CELL   = BSIZE // 15
+    BX = SIDE_W + (area_w - BSIZE) // 2
+    BY = (area_h - BSIZE) // 2
+
+    BASE_SCALE  = 0.82
+    BASE_SZ     = int(CELL * 6 * BASE_SCALE)
+    BASE_OFFSET = (CELL * 6 - BASE_SZ) // 2
+    B_CELL      = BASE_SZ / 6.0
+
+    _recalc_yards()
+
+_recalc_yards()
