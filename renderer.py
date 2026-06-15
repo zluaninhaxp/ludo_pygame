@@ -1,5 +1,5 @@
 """
-renderer.py — Peças, dado, HUD flutuante e telas de fim.
+renderer.py — Peças, dado, HUD flutuante estilizado e telas de fim.
 """
 import pygame
 import math
@@ -22,7 +22,7 @@ def _load_font(size, bold=False):
     if key in _font_cache:
         return _font_cache[key]
     for name in ("Fredoka One", "Nunito", "Varela Round",
-                 "Comic Sans MS", "Arial Rounded MT Bold"):
+                 "Comic Sans MS", "Arial Rounded MT Bold", "Arial"):
         try:
             f = pygame.font.SysFont(name, size, bold=bold)
             _font_cache[key] = f
@@ -38,22 +38,17 @@ def _fonts(card_w):
     return (
         _load_font(int(base * 3.0), bold=True),
         _load_font(int(base * 1.6), bold=True),
-        _load_font(int(base * 1.2), bold=True),
-        _load_font(int(base * 0.95)),
+        _load_font(int(base * 1.3), bold=True),
+        _load_font(int(base * 0.9)),
     )
 
 _INK         = (52,  42,  76)
-_PANEL_BG    = (36,  26,  64)
-_PANEL_EDGE  = (72,  58, 112)
-_CARD_IDLE   = (54,  42,  86)
-_CARD_SH     = (20,  14,  42)
 _HINT_COL    = (255, 222,  60)
 _HINT_BG     = (62,  50,  98)
-_DIM         = (125, 112, 158)
+_DIM         = (145, 132, 178)
 _RANK_GOLD   = (255, 208,   0)
 _RANK_SILVER = (198, 198, 198)
 _RANK_BRONZE = (190, 130,  50)
-_SH_OFF = 3
 
 def _sh(color, amt=45):
     return (max(color[0]-amt,0), max(color[1]-amt,0), max(color[2]-amt,0))
@@ -64,6 +59,7 @@ def _txt(surf, text, font, color, cx, cy, anchor="c"):
     if   anchor == "c":  r.center  = (cx, cy)
     elif anchor == "tl": r.topleft = (cx, cy)
     elif anchor == "tc": r.midtop  = (cx, cy)
+    elif anchor == "ml": r.midleft = (cx, cy)
     surf.blit(img, r)
 
 def _txt_sh(surf, text, font, color, cx, cy, sh_col=None, off=2, anchor="c"):
@@ -91,8 +87,11 @@ def draw_die(surf, val, spinning, cx, cy, size=56):
 
     dot_fill = (212, 42, 68) if spinning else (46, 36, 72)
     dot_sh   = _sh(dot_fill, 55)
-    step     = max(6, size // 8)
-    r_dot    = max(3, size // 11)
+    
+    # --- MUDANÇA AQUI: Aumentamos o multiplicador para espalhar os pontos ---
+    step     = max(8, int(size * 0.20))  # Antes era size // 8
+    r_dot    = max(3, int(size * 0.11))  # Bolinhas um pouco mais gordinhas
+    
     for dx, dy in _DIE_DOTS.get(val, []):
         px_ = cx + dx * step
         py_ = cy + dy * step
@@ -187,21 +186,32 @@ def draw_pieces(surf, game):
         pygame.draw.rect(surf, color, rect, border_radius=2)
 
 def _draw_piece(surf, pid, idx, px, py, sel, bounce_off=0):
+    import math
     max_size = int(C.CELL * 0.95)
     nome     = C.PLAYER_CHOICES.get(pid, "default")
     
+    # A peça real vai subir, o resto (sombra) fica no chão
     py_final = py + bounce_off
+
+    # 1. Carrega a imagem base (do tamanho normal)
     img = _get_piece_image(nome, max_size)
     current_size = max_size
 
+    # 2. EFEITO PULSAR (Apenas se a peça puder ser jogada)
+    # Removemos a bola dourada de fundo e aplicamos o zoom na própria imagem
     if sel:
-        pulse = (math.sin(pygame.time.get_ticks() * 0.003) + 1.0) / 2.0
-        current_size = int(max_size * (1.0 + pulse * 0.12)) // 2 * 2
+        # Usamos abs() para a imagem apenas crescer e voltar ao normal (como um coração batendo)
+        pulse_scale = 1.0 + abs(math.sin(pygame.time.get_ticks() * 0.004)) * 0.10
+        current_size = int(max_size * pulse_scale)
+        
+        # Estica a imagem suavemente para o tamanho do pulso
         img = pygame.transform.smoothscale(img, (current_size, current_size))
 
     img_rect = img.get_rect(center=(px, py_final))
 
+    # 3. Sombra dinâmica (Acompanha o tamanho do pulso E a altura do pulo!)
     shadow_size = int(current_size * 1.1)
+    
     if bounce_off < 0:
         shrink = int(bounce_off * 0.3)
         shadow_size = max(15, shadow_size + shrink)
@@ -212,11 +222,15 @@ def _draw_piece(surf, pid, idx, px, py, sel, bounce_off=0):
     
     sh_alpha = max(10, int(40 + bounce_off * 0.6))
     sh_surf.fill((0, 0, 0, sh_alpha), special_flags=pygame.BLEND_RGBA_MULT)
+    
+    # Desenha a sombra encostada no chão
     surf.blit(sh_surf, (px - shadow_size // 2, py - shadow_size // 2))
 
+    # 4. Desenha a peça voando ou pulsando
     surf.blit(img, img_rect)
 
-# ── HUD: 4 Cantos Flutuantes Alinhados às Bordas ──────────────────────────────
+
+# ── HUD: Cards Premium Estilo Sticker ─────────────────────────────────────────
 def draw_sidebar(surf, game):
     W = C.W
     H = C.H
@@ -225,9 +239,11 @@ def draw_sidebar(surf, game):
     BSIZE = C.BSIZE
 
     lat_w = BX 
-    card_w = max(110, min(220, int(lat_w * 0.82)))
-    card_h = max(56, int(card_w * 0.45))
-    die_size = max(32, int(card_w * 0.4))
+    card_w = max(130, min(240, int(lat_w * 0.85)))
+    card_h = max(80, int(card_w * 0.65))
+    head_h = int(card_h * 0.45) 
+    
+    die_size = max(24, int(card_w * 0.24))
 
     F_BIG, F_MED, F_SM, F_XSM = _fonts(card_w)
 
@@ -235,7 +251,6 @@ def draw_sidebar(surf, game):
     rx_left  = BX - gap - card_w
     rx_right = BX + BSIZE + gap
 
-    # Alinhado exatamente no topo da base (RY)
     ry_top = BY
     ry_bot = BY + BSIZE - card_h
 
@@ -244,79 +259,143 @@ def draw_sidebar(surf, game):
     anchors_rx = {0: rx_left, 1: rx_right, 2: rx_right, 3: rx_left}
     anchors_ry = {0: ry_top,  1: ry_top,   2: ry_bot,   3: ry_bot}
 
+    # ── PASSO 1: Desenhar o Painel do Dado (Animado) ──
+    for pl in game.players:
+        pid = pl.pid
+        if pid != act_pid: continue
+        
+        rx = anchors_rx[pid]
+        ry = anchors_ry[pid]
+        cx = rx + card_w // 2  
+        direction = 1 if pid in (0, 1) else -1
+        
+        panel_w = int(card_w * 0.45)
+        panel_h = int(card_h * 0.60)
+        px = rx + (card_w - panel_w) // 2
+        
+        if direction == 1:
+            py = ry + card_h - 15
+            die_cy = py + 15 + (panel_h - 15) // 2
+        else:
+            py = ry - panel_h + 15
+            die_cy = py + (panel_h - 15) // 2
+
+        scale = 1.0
+        is_popping = (game.turn_ticks < 300 and not game.is_playing_again)
+        is_pulsing = (game.is_playing_again and game.phase == "roll" and game.dice_spin == 0)
+
+        if is_popping:
+            progress = game.turn_ticks / 300.0
+            scale = (1.0 - math.pow(1.0 - progress, 3)) + math.sin(progress * math.pi) * 0.15
+        elif is_pulsing:
+            pulse = (math.sin(pygame.time.get_ticks() * 0.005) + 1.0) / 2.0
+            scale = 1.0 + pulse * 0.12
+
+        current_die_sz  = max(4, int(die_size * scale)) // 2 * 2
+
+        game.dice_rect = pygame.Rect(px, py, panel_w, panel_h)
+
+        pygame.draw.rect(surf, (0,0,0,30), (px+4, py+4, panel_w, panel_h), border_radius=12)
+        pygame.draw.rect(surf, (100, 85, 115), game.dice_rect, border_radius=12)
+        pygame.draw.rect(surf, _INK, game.dice_rect, 2, border_radius=12)
+
+        spinning = game.dice_spin > 0
+        val = game.dice_show if spinning else (game.roll if game.roll else game.dice_final)
+        
+        draw_die(surf, val, spinning, px + panel_w//2, die_cy, size=current_die_sz)
+
+        cp = game.cp()
+        hint = ""
+        if game.phase == "roll" and cp.human and not spinning:
+            # Se for turno extra (dado pulsando), muda o texto!
+            if getattr(game, 'is_playing_again', False):
+                hint = "Jogue novamente!"
+            else:
+                hint = "Clique = rolar"
+        elif game.phase == "pick":
+            hint = "Mova a peca"
+        elif not cp.human and game.phase in ("roll","aipick","anim", "anim_capture"):
+            hint = "CPU jogando..."
+
+        if hint:
+            # Posicionamento simples do texto, sem caixas de fundo
+            if direction == 1:
+                hy = py + panel_h + 14
+            else:
+                hy = py - 14
+            
+            # Texto limpo sem sombra
+            _txt(surf, hint, F_XSM, (190, 180, 200), cx, hy)
+
+            if game.msg:
+                if direction == 1:
+                    msg_y = hy + 18
+                else:
+                    msg_y = hy - 18
+                _wrap_text(surf, game.msg, F_XSM, (210, 200, 220), cx, msg_y, 22, direction)
+
+    # ── PASSO 2: Desenhar os Cards dos Jogadores por Cima ──
     for pl in game.players:
         pid = pl.pid
         rx = anchors_rx[pid]
         ry = anchors_ry[pid]
-        
-        cx = rx + card_w // 2
-        cy = ry + card_h // 2
+        cx = rx + card_w // 2  
         act = (pid == act_pid)
 
-        bg = PC[pid] if act else _CARD_IDLE
-
-        pygame.draw.rect(surf, bg,        (rx, ry, card_w, card_h), border_radius=11)
-        pygame.draw.rect(surf, _HINT_COL, (rx, ry, card_w, card_h), 3 if act else 0, border_radius=11)
-        pygame.draw.rect(surf, _INK,      (rx, ry, card_w, card_h), 1, border_radius=11)
-
-        display_name = C.PLAYER_DISPLAY_NAMES.get(pid, PN[pid])
-        _txt(surf, display_name, F_SM,  WHITE, cx, ry + int(card_h*0.3))
-        _txt(surf, "Humano" if pl.human else "CPU", F_XSM, (235,228,255) if act else _DIM, cx, ry + int(card_h*0.6))
-
-        fin  = sum(1 for p in pl.pieces if p.state == "done")
-        rp   = max(4, card_w // 24)
-        pip_y = ry + int(card_h * 0.85)
-        pip_spacing = max(12, (card_w - 20) // 4)
-        start_x = cx - (1.5 * pip_spacing)
-        for k in range(4):
-            px_   = start_x + k * pip_spacing
-            sh_c  = PD[pid] if k < fin else (18,12,38)
-            body  = WHITE   if k < fin else PL[pid]
-            edge  = PC[pid] if k < fin else (60,48,92)
-            pygame.draw.circle(surf, sh_c, (px_+1, pip_y+1), rp)
-            pygame.draw.circle(surf, body, (px_,   pip_y),   rp)
-            pygame.draw.circle(surf, edge, (px_,   pip_y),   rp, max(1, rp//2))
-
+        pygame.draw.rect(surf, (0,0,0,30), (rx+5, ry+5, card_w, card_h), border_radius=16)
+        
+        body_col = (70, 56, 85) if act else (54, 42, 70)
+        pygame.draw.rect(surf, body_col, (rx, ry, card_w, card_h), border_radius=16)
+        
+        pygame.draw.rect(surf, PC[pid], (rx, ry, card_w, head_h), border_top_left_radius=16, border_top_right_radius=16)
+        
+        pygame.draw.line(surf, _sh(PC[pid], 40), (rx, ry + head_h), (rx + card_w - 1, ry + head_h), 2)
+        
+        pygame.draw.rect(surf, _INK, (rx, ry, card_w, card_h), 2, border_radius=16)
         if act:
-            direction = 1 if pid in (0, 1) else -1
-            if direction == 1:
-                dcy = ry + card_h + die_size // 2 + max(8, int(H*0.015))
-            else:
-                dcy = ry - die_size // 2 - max(8, int(H*0.015))
+            pygame.draw.rect(surf, _HINT_COL, (rx-2, ry-2, card_w+4, card_h+4), 3, border_radius=18)
 
-            spinning = game.dice_spin > 0
-            val = game.dice_show if spinning else (game.roll if game.roll else game.dice_final)
-            draw_die(surf, val, spinning, cx, dcy, size=die_size)
+        avatar_sz = int(card_h * 0.55)
+        avatar_x = rx + 10 + avatar_sz//2
+        avatar_y = ry + head_h - int(avatar_sz * 0.15)
+        
+        pygame.draw.circle(surf, _sh(PC[pid], 30), (avatar_x, avatar_y+2), avatar_sz//2 + 2)
+        pygame.draw.circle(surf, PC[pid], (avatar_x, avatar_y), avatar_sz//2 + 2) 
+        
+        nome = C.PLAYER_CHOICES.get(pid, "default")
+        avatar_img = _get_piece_image(nome, avatar_sz)
+        surf.blit(avatar_img, avatar_img.get_rect(center=(avatar_x, avatar_y)))
 
-            cp = game.cp()
-            hint = ""
-            if game.phase == "roll" and cp.human and not spinning:
-                hint = "ESPACO = rolar"
-            elif game.phase == "pick":
-                hint = "Clique na peca"
-            elif not cp.human and game.phase in ("roll","aipick","anim", "anim_capture"):
-                hint = "CPU pensando..."
+        name_x = rx + 15 + avatar_sz
+        name_y = ry + head_h // 2
+        display_name = C.PLAYER_DISPLAY_NAMES.get(pid, PN[pid])
+        
+        # Usando _txt no lugar de _txt_sh para remover a sombra
+        _txt(surf, display_name, F_SM, WHITE, name_x, name_y, anchor="ml")
+        
+        type_y = ry + head_h + 12
+        type_str = "Tipo: Humano" if pl.human else "Tipo: CPU"
+        _txt(surf, type_str, F_XSM, (210, 200, 220), name_x, type_y, anchor="ml")
 
-            if hint:
-                hh = max(20, int(card_h * 0.35))
-                if direction == 1:
-                    hy = dcy + die_size // 2 + hh // 2 + max(6, int(H*0.01))
-                else:
-                    hy = dcy - die_size // 2 - hh // 2 - max(6, int(H*0.01))
-                
-                rect_y = hy - hh // 2
-                
-                pygame.draw.rect(surf, _HINT_BG, (rx, rect_y, card_w, hh), border_radius=8)
-                pygame.draw.rect(surf, _HINT_COL,(rx, rect_y, card_w, hh), 2, border_radius=8)
-                _txt(surf, hint, F_XSM, _HINT_COL, cx, hy)
+        fin = sum(1 for p in pl.pieces if p.state == "done")
+        slot_r = max(6, int(card_w * 0.07))
+        slot_spacing = (card_w - 20) / 4
+        slot_start_x = rx + 10 + slot_spacing / 2
+        slot_y = ry + card_h - slot_r - 10
+        
+        for k in range(4):
+            sx = slot_start_x + k * slot_spacing
+            
+            pygame.draw.circle(surf, (30, 20, 40), (sx, slot_y+1), slot_r)
+            pygame.draw.circle(surf, (40, 30, 55), (sx, slot_y), slot_r)
+            pygame.draw.circle(surf, _INK, (sx, slot_y), slot_r, 1)
+            
+            if k < fin:
+                pygame.draw.circle(surf, _sh(PL[pid], 30), (sx, slot_y+2), slot_r-2)
+                pygame.draw.circle(surf, PL[pid], (sx, slot_y), slot_r-2)
+                pygame.draw.circle(surf, PC[pid], (sx, slot_y), slot_r-2, 1)
 
-                if game.msg:
-                    if direction == 1:
-                        msg_y = rect_y + hh + 8
-                    else:
-                        msg_y = rect_y - 8
-                    _wrap_text(surf, game.msg, F_XSM, (255,205,85), cx, msg_y, 22, direction)
-
+# Nova versão do wrap_text que também usa sombrinha discreta (_txt_sh)
 def _wrap_text(surf, text, font, color, cx, y0, max_chars, direction=1):
     words = text.split()
     line, lines = "" , []
@@ -329,10 +408,14 @@ def _wrap_text(surf, text, font, color, cx, y0, max_chars, direction=1):
             line = w
     if line: lines.append(line)
     lines = lines[-4:]
+    
     if direction == -1:
         y0 = y0 - (len(lines) * 16)
+        
     for li, l in enumerate(lines):
+        # Removida a sombra aqui também, usando apenas _txt
         _txt(surf, l, font, color, cx, y0 + li * 16)
+
 
 def draw_end_screen(surf, game):
     W = C.W

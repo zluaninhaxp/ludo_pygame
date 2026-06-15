@@ -30,8 +30,11 @@ class Game:
         self.anim_timer = 0
         self.captures_queue = [] 
         
-        # NOVO: Sistema de partículas para o confete!
         self.particles  = [] 
+
+        # ── NOVO: Controles da animação do Dado ──
+        self.turn_ticks = 0
+        self.is_playing_again = False
 
         self.ai_wait = 1000
 
@@ -49,16 +52,14 @@ class Game:
         self.movable   = cp.movable(self.roll)
 
         if not self.movable:
-            self.msg   = f"{_pname(cp.pid)}: sem movimentos — vez passada."
             self.phase = "wait"
             self.ai_wait = 1300
         else:
-            self.msg = (f"{_pname(cp.pid)} tirou {self.roll}!"
-                        + (" Joga de novo!" if self.roll == 6 else ""))
             if self.roll == 6:
                 self.extra_turn = True
             self.phase   = "aipick" if not cp.human else "pick"
             self.ai_wait = 700
+
 
     def pick(self, piece):
         self.anim_piece = piece
@@ -99,7 +100,6 @@ class Game:
         cp    = self.cp()
         piece.move(self.roll)
 
-        # Dispara o confete se a peça acabou de chegar no centro!
         if piece.state == "done":
             self.spawn_confetti()
 
@@ -116,8 +116,6 @@ class Game:
 
         if captured_pieces:
             self.extra_turn = True
-            p_names = ", ".join([_pname(op.pid) for op in captured_pieces])
-            self.msg = f"💥 {_pname(cp.pid)} capturou {p_names}!"
             self.captures_queue = captured_pieces
             self._start_next_capture()
         else:
@@ -155,16 +153,21 @@ class Game:
         self._next()
 
     def _next(self):
+        was_extra = self.extra_turn # Guarda se ganhou turno extra
         if not self.extra_turn:
             for _ in range(self.n):
                 self.turn = (self.turn + 1) % self.n
                 if not self.players[self.turn].done:
                     break
         self.extra_turn = False
+        
+        # ── NOVO: Reinicia o relógio do turno e avisa se vai pulsar ──
+        self.is_playing_again = was_extra  
         self.roll       = None
         self.phase      = "roll"
         self.movable    = []
         self.ai_wait    = 800
+        self.turn_ticks = 0
 
     def ai_choose(self):
         m  = self.movable
@@ -199,13 +202,13 @@ class Game:
         return m[0]
 
     def update(self, dt: int):
-        # NOVO: Física dos confetes caindo
+        self.turn_ticks += dt  # ── NOVO: O relógio do turno avança ──
+        
         for p in getattr(self, 'particles', []):
-            p[0] += p[2]  # X soma a velocidade X
-            p[1] += p[3]  # Y soma a velocidade Y
-            p[3] += 0.35  # Gravidade (puxa o confete para baixo)
-            p[6] -= 1     # Perde tempo de vida
-        # Remove os confetes que já "morreram"
+            p[0] += p[2]  
+            p[1] += p[3]  
+            p[3] += 0.35  
+            p[6] -= 1     
         self.particles = [p for p in getattr(self, 'particles', []) if p[6] > 0]
 
         if self.phase == "end":
@@ -259,6 +262,12 @@ class Game:
             return
 
     def click(self, mx: int, my: int):
+        # NOVO: Checa se o jogador clicou no painel do dado para rolar
+        if self.phase == "roll" and self.cp().human and self.dice_spin == 0:
+            if hasattr(self, 'dice_rect') and self.dice_rect and self.dice_rect.collidepoint(mx, my):
+                self.start_roll()
+                return
+
         if self.phase != "pick":
             return
         HALF = C.CELL // 2 + 2
