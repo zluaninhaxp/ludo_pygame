@@ -53,6 +53,9 @@ _RANK_BRONZE = (190, 130,  50)
 
 _SH_OFF = 3
 
+# Offsets para distribuir várias peças numa mesma casa (2×2 grid)
+_OFFSETS4 = [(-7, -7), (7, -7), (-7, 7), (7, 7)]
+
 
 def _sh(color, amt=45):
     return (max(color[0]-amt, 0), max(color[1]-amt, 0), max(color[2]-amt, 0))
