@@ -9,16 +9,22 @@ from menu      import Menu
 
 
 def _initial_size():
-    """Retorna (~70 % da tela) respeitando proporção 4:3 do layout."""
+    """Retorna (~70 % da altura da tela) forçando uma proporção mais larga (16:9)."""
     pygame.display.init()
     info = pygame.display.Info()
     sw, sh = info.current_w, info.current_h
-    # 70 % da menor dimensão, múltiplo de 16 pra ficar limpo
+    
     scale = 0.70
-    h = int(sh * scale) & ~15          # arredonda para baixo em 16
-    w = int(h * (960 / 720)) & ~15
-    w = min(w, int(sw * scale) & ~15)
-    return max(w, 640), max(h, 480)
+    h = int(sh * scale) & ~15          # Mantém a altura legal que você gostou
+    
+    # MÁGICA AQUI: A largura agora é calculada para ser no formato Widescreen (16:9)
+    w = int(h * (16 / 9)) & ~15
+    
+    # Garante que não vai estourar o monitor do jogador
+    w = min(w, int(sw * 0.9) & ~15)
+    
+    # Largura mínima de 850 para não espremer os cards se a tela for pequena
+    return max(w, 850), max(h, 480)
 
 
 def main():

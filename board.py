@@ -162,7 +162,6 @@ def draw_board(surf: pygame.Surface):
                 mask.fill((255,255,255,255))
                 pygame.draw.circle(mask, (0,0,0,0), (r+2, r+2), hr)
                 hl_surf.blit(mask, (0,0), special_flags=pygame.BLEND_RGBA_MIN)
-                surf.blit(hl_surf, (cx_ - r, cy_ - r))
 
     # 3 · Caminho principal ────────────────────────────────────────────────────
     _PM = max(2, CELL // 15)
@@ -190,7 +189,7 @@ def draw_board(surf: pygame.Surface):
     center_surf = pygame.Surface((cs, cs), pygame.SRCALPHA)
     mid_l = (cs // 2, cs // 2)
     corners_l = [(0,0),(cs,0),(cs,cs),(0,cs)]
-    for i, pid in enumerate([0,1,2,3]):
+    for i, pid in enumerate([1, 2, 3, 0]):
         pygame.draw.polygon(center_surf, PC[pid],
                             [corners_l[i], corners_l[(i+1)%4], mid_l])
     mask = pygame.Surface((cs, cs), pygame.SRCALPHA)

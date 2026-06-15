@@ -28,6 +28,10 @@ class Game:
         self.anim_path  = []
         self.anim_step  = 0
         self.anim_timer = 0
+        self.captures_queue = [] 
+        
+        # NOVO: Sistema de partículas para o confete!
+        self.particles  = [] 
 
         self.ai_wait = 1000
 
@@ -77,11 +81,29 @@ class Game:
             pts.append(C.steps_to_px(piece.pid, ns))
         return pts
 
+    # NOVO: Gatilho de Confetes
+    def spawn_confetti(self):
+        cx, cy = C.gpx(*C.CENTER)
+        colors = [C.PC[0], C.PC[1], C.PC[2], C.PC[3], C.WHITE, (255, 150, 50), (50, 200, 255)]
+        # Gera 60 pedacinhos de papel com gravidade e direções aleatórias
+        for _ in range(60): 
+            sx = random.uniform(-6, 6)
+            sy = random.uniform(-12, -3) # Explosão forte para cima
+            size = random.randint(6, 12)
+            life = random.randint(60, 120)
+            color = random.choice(colors)
+            self.particles.append([cx, cy, sx, sy, color, size, life])
+
     def apply_move(self):
         piece = self.anim_piece
         cp    = self.cp()
         piece.move(self.roll)
 
+        # Dispara o confete se a peça acabou de chegar no centro!
+        if piece.state == "done":
+            self.spawn_confetti()
+
+        captured_pieces = []
         if piece.state == "active" and piece.steps <= 50:
             gp = piece.grid
             if gp and gp not in SAFE:
@@ -90,11 +112,34 @@ class Game:
                         continue
                     for op in pl.pieces:
                         if op.state == "active" and op.grid == gp:
-                            op.send_home()
-                            self.extra_turn = True
-                            self.msg = (f"💥 {_pname(cp.pid)} capturou "
-                                        f"{_pname(pl.pid)}!")
+                            captured_pieces.append(op)
 
+        if captured_pieces:
+            self.extra_turn = True
+            p_names = ", ".join([_pname(op.pid) for op in captured_pieces])
+            self.msg = f"💥 {_pname(cp.pid)} capturou {p_names}!"
+            self.captures_queue = captured_pieces
+            self._start_next_capture()
+        else:
+            self._finalize_turn()
+
+    def _start_next_capture(self):
+        if not self.captures_queue:
+            self._finalize_turn()
+            return
+
+        op = self.captures_queue.pop(0)
+        self.anim_piece = op
+        start_px = C.gpx(*op.grid) 
+        end_px = C.YARDS[op.pid][op.idx] 
+        
+        self.anim_path = [start_px, end_px]
+        self.anim_step = 0
+        self.anim_timer = 0
+        self.phase = "anim_capture"
+
+    def _finalize_turn(self):
+        cp = self.cp()
         if cp.all_done() and not cp.done:
             cp.done = True
             self.rankings.append(cp.pid)
@@ -154,6 +199,15 @@ class Game:
         return m[0]
 
     def update(self, dt: int):
+        # NOVO: Física dos confetes caindo
+        for p in getattr(self, 'particles', []):
+            p[0] += p[2]  # X soma a velocidade X
+            p[1] += p[3]  # Y soma a velocidade Y
+            p[3] += 0.35  # Gravidade (puxa o confete para baixo)
+            p[6] -= 1     # Perde tempo de vida
+        # Remove os confetes que já "morreram"
+        self.particles = [p for p in getattr(self, 'particles', []) if p[6] > 0]
+
         if self.phase == "end":
             return
 
@@ -171,6 +225,16 @@ class Game:
                 self.anim_step += 1
                 if self.anim_step >= len(self.anim_path) - 1:
                     self.apply_move()
+            return
+
+        if self.phase == "anim_capture" and self.anim_piece:
+            self.anim_timer += dt
+            if self.anim_timer >= 500:
+                self.anim_timer = 0
+                self.anim_step += 1
+                if self.anim_step >= len(self.anim_path) - 1:
+                    self.anim_piece.send_home()
+                    self._start_next_capture() 
             return
 
         if self.phase == "wait":

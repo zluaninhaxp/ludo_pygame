@@ -41,6 +41,11 @@ CHARACTER_ROSTER = [
     ("miguel",   "Miguel"),
     ("darosa",   "Da Rosa"),
     ("joaop",    "João Pedro"),
+    ("luana",    "Luana"),
+    ("jonathan",   "Jonathan"),
+    ("jean",    "Jean"),
+    ("hudson",    "Hudson"),
+    ("bianca",    "Maria"),
 ]
 
 CHARACTER_NAMES = {slug: name for slug, name in CHARACTER_ROSTER}
@@ -139,7 +144,6 @@ def gpx(col, row):
     return (BX + col * CELL + CELL // 2, BY + row * CELL + CELL // 2)
 
 def steps_to_px(pid, steps):
-    # Correção da conversão de esquina
     if steps <= 50:
         return gpx(*MPATH[(ENTRY[pid] + steps) % 52])
     hs = steps - 51
@@ -155,15 +159,27 @@ def resize(new_w: int, new_h: int):
     W = new_w
     H = new_h
 
-    SIDE_W = max(120, min(200, int(new_w * 0.167)))
-    area_w = new_w - SIDE_W
-    area_h = new_h
-    margin = max(16, int(min(area_w, area_h) * 0.03))
-    BSIZE  = (min(area_w, area_h) - margin * 2) // 15 * 15  
+    # 1. A altura dita o tamanho máximo que o tabuleiro gostaria de ter
+    margin_y = max(16, int(new_h * 0.03))
+    max_bsize_h = new_h - margin_y * 2
+    
+    # 2. A largura é obrigada a reservar a "Zona VIP" para os cards nas laterais
+    # Pelo menos 150px de segurança garantidos na esquerda e na direita
+    min_card_space = 150 
+    max_bsize_w = new_w - (min_card_space * 2)
 
+    # 3. O tabuleiro escolhe o menor limite, garantindo que nunca esmague os cantos
+    BSIZE = max(300, min(max_bsize_h, max_bsize_w))
+    BSIZE = (BSIZE // 15) * 15  
+    
     CELL   = BSIZE // 15
-    BX = SIDE_W + (area_w - BSIZE) // 2
-    BY = (area_h - BSIZE) // 2
+    
+    # Centraliza perfeitamente
+    BX = (new_w - BSIZE) // 2
+    BY = (new_h - BSIZE) // 2
+
+    # A margem que sobrou vira nossa base para desenhar as coisas
+    SIDE_W = BX
 
     BASE_SCALE  = 0.82
     BASE_SZ     = int(CELL * 6 * BASE_SCALE)

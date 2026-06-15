@@ -1,13 +1,11 @@
 """
-renderer.py — Peças, dado, sidebar e telas de fim.
-Usa import constants para sempre ler os valores atuais após resize().
+renderer.py — Peças, dado, HUD flutuante e telas de fim.
 """
 import pygame
 import math
 import os
 import constants as C
 
-# Paleta estática
 WHITE = C.WHITE
 BLACK = C.BLACK
 BG    = C.BG
@@ -16,9 +14,7 @@ PL    = C.PL
 PD    = C.PD
 PN    = C.PN
 
-# ── Fontes (recriadas quando o layout muda) ───────────────────────────────────
 pygame.font.init()
-
 _font_cache = {}
 
 def _load_font(size, bold=False):
@@ -37,19 +33,15 @@ def _load_font(size, bold=False):
     _font_cache[key] = f
     return f
 
-
-def _fonts(side_w):
-    """Retorna (F_BIG, F_MED, F_SM, F_XSM) proporcionais à sidebar."""
-    base = max(10, side_w // 8)
+def _fonts(card_w):
+    base = max(10, card_w // 10)
     return (
-        _load_font(int(base * 2.8), bold=True),
-        _load_font(int(base * 1.8), bold=True),
-        _load_font(int(base * 1.3), bold=True),
-        _load_font(int(base * 1.0)),
+        _load_font(int(base * 3.0), bold=True),
+        _load_font(int(base * 1.6), bold=True),
+        _load_font(int(base * 1.2), bold=True),
+        _load_font(int(base * 0.95)),
     )
 
-
-# ── Paleta UI ────────────────────────────────────────────────────────────────
 _INK         = (52,  42,  76)
 _PANEL_BG    = (36,  26,  64)
 _PANEL_EDGE  = (72,  58, 112)
@@ -61,15 +53,11 @@ _DIM         = (125, 112, 158)
 _RANK_GOLD   = (255, 208,   0)
 _RANK_SILVER = (198, 198, 198)
 _RANK_BRONZE = (190, 130,  50)
-
 _SH_OFF = 3
-
 
 def _sh(color, amt=45):
     return (max(color[0]-amt,0), max(color[1]-amt,0), max(color[2]-amt,0))
 
-
-# ── Texto ─────────────────────────────────────────────────────────────────────
 def _txt(surf, text, font, color, cx, cy, anchor="c"):
     img = font.render(str(text), True, color)
     r   = img.get_rect()
@@ -78,14 +66,11 @@ def _txt(surf, text, font, color, cx, cy, anchor="c"):
     elif anchor == "tc": r.midtop  = (cx, cy)
     surf.blit(img, r)
 
-
-def _txt_sh(surf, text, font, color, cx, cy, sh_col=None, off=2):
+def _txt_sh(surf, text, font, color, cx, cy, sh_col=None, off=2, anchor="c"):
     sc = sh_col or _sh(color, 90)
-    _txt(surf, text, font, sc,    cx+off, cy+off)
-    _txt(surf, text, font, color, cx,     cy)
+    _txt(surf, text, font, sc,    cx+off, cy+off, anchor)
+    _txt(surf, text, font, color, cx,     cy, anchor)
 
-
-# ── Dado ──────────────────────────────────────────────────────────────────────
 _DIE_DOTS = {
     1: [(0,0)],
     2: [(-1,-1),(1,1)],
@@ -94,7 +79,6 @@ _DIE_DOTS = {
     5: [(-1,-1),(1,-1),(0,0),(-1,1),(1,1)],
     6: [(-1,-1),(1,-1),(-1,0),(1,0),(-1,1),(1,1)],
 }
-
 
 def draw_die(surf, val, spinning, cx, cy, size=56):
     rad   = max(6, size // 5)
@@ -115,10 +99,7 @@ def draw_die(surf, val, spinning, cx, cy, size=56):
         pygame.draw.circle(surf, dot_sh,  (px_+1, py_+1), r_dot)
         pygame.draw.circle(surf, dot_fill,(px_,   py_),    r_dot)
 
-
-# ── Gerenciador de Imagens ────────────────────────────────────────────────────
 _PIECE_IMAGES = {}
-
 
 def _get_piece_image(nome, max_size):
     key = (nome, max_size)
@@ -138,13 +119,9 @@ def _get_piece_image(nome, max_size):
     _PIECE_IMAGES[key] = final
     return final
 
-
-# Offsets para empilhar peças na mesma casa
 _OFFSETS4 = [(-6, -6), (6, -6), (-6, 6), (6, 6)]
 
 def draw_pieces(surf, game):
-    import math # Garante que a matemática do pulo funcione
-    
     cell_cnt = {}
     for pl in game.players:
         for p in pl.pieces:
@@ -162,25 +139,25 @@ def draw_pieces(surf, game):
                 continue
             
             is_anim = (p is anim_p and game.anim_path)
-            bounce_off = 0 # Deslocamento vertical padrão
+            bounce_off = 0
             
             if is_anim:
-                # ── ANIMAÇÃO DESLIZANTE COM BOUNCE (PULO SUAVE) ──
                 p0 = game.anim_path[astep]
-                
                 if astep + 1 < len(game.anim_path):
                     p1 = game.anim_path[astep + 1]
                 else:
                     p1 = p0
                 
-                # O timer agora vai de 0 a 200 (mais lento e suave)
-                progress = min(1.0, game.anim_timer / 200.0) 
-                
+                if game.phase == "anim_capture":
+                    duration = 500.0  
+                    jump_height = C.CELL * 3.5  
+                else:
+                    duration = 200.0  
+                    jump_height = C.CELL * 0.4
+                    
+                progress = min(1.0, game.anim_timer / duration) 
                 px = p0[0] + (p1[0] - p0[0]) * progress
                 py = p0[1] + (p1[1] - p0[1]) * progress
-                
-                # Diminuímos a altura: agora o pulo é só 40% do tamanho da casa (era 70%)
-                jump_height = C.CELL * 0.4 
                 bounce_off = -math.sin(progress * math.pi) * jump_height
                 
             elif p.state == "home":
@@ -190,7 +167,6 @@ def draw_pieces(surf, game):
                 if g is None:
                     continue
                 ox, oy = 0, 0
-                # Empilha caso tenha mais de uma peça na casa
                 if cell_cnt.get(g, 1) > 1:
                     k = cell_ord.get(g, 0)
                     cell_ord[g] = k + 1
@@ -201,39 +177,31 @@ def draw_pieces(surf, game):
                 continue
                 
             sel = (p in game.movable and game.phase == "pick")
-            
-            # Passamos o px e py do CHÃO, e o bounce_off (ALTURA) separados
             _draw_piece(surf, p.pid, p.idx, px, py, sel, bounce_off)
 
+    for p in getattr(game, 'particles', []):
+        cx, cy, sx, sy, color, size, life = p
+        w = max(1, int(size * abs(math.sin(life * 0.15))))
+        h = size
+        rect = pygame.Rect(cx - w//2, cy - h//2, w, h)
+        pygame.draw.rect(surf, color, rect, border_radius=2)
 
 def _draw_piece(surf, pid, idx, px, py, sel, bounce_off=0):
-    import math
     max_size = int(C.CELL * 0.95)
     nome     = C.PLAYER_CHOICES.get(pid, "default")
     
-    # A peça real vai subir, o resto (sombra) fica no chão
     py_final = py + bounce_off
-
-    # 1. Carrega a imagem base (do tamanho normal)
     img = _get_piece_image(nome, max_size)
     current_size = max_size
 
-    # 2. EFEITO PULSAR (Apenas se a peça puder ser jogada)
-    # Removemos a bola dourada de fundo e aplicamos o zoom na própria imagem
     if sel:
-        # Usamos abs() para a imagem apenas crescer e voltar ao normal (como um coração batendo)
-        # O 0.15 significa que ela cresce até 15% do tamanho original
-        pulse_scale = 1.0 + abs(math.sin(pygame.time.get_ticks() * 0.004)) * 0.15
-        current_size = int(max_size * pulse_scale)
-        
-        # Estica a imagem suavemente para o tamanho do pulso
+        pulse = (math.sin(pygame.time.get_ticks() * 0.003) + 1.0) / 2.0
+        current_size = int(max_size * (1.0 + pulse * 0.12)) // 2 * 2
         img = pygame.transform.smoothscale(img, (current_size, current_size))
 
     img_rect = img.get_rect(center=(px, py_final))
 
-    # 3. Sombra dinâmica (Acompanha o tamanho do pulso E a altura do pulo!)
     shadow_size = int(current_size * 1.1)
-    
     if bounce_off < 0:
         shrink = int(bounce_off * 0.3)
         shadow_size = max(15, shadow_size + shrink)
@@ -244,113 +212,114 @@ def _draw_piece(surf, pid, idx, px, py, sel, bounce_off=0):
     
     sh_alpha = max(10, int(40 + bounce_off * 0.6))
     sh_surf.fill((0, 0, 0, sh_alpha), special_flags=pygame.BLEND_RGBA_MULT)
-    
-    # Desenha a sombra encostada no chão
     surf.blit(sh_surf, (px - shadow_size // 2, py - shadow_size // 2))
 
-    # 4. Desenha a peça voando ou pulsando
     surf.blit(img, img_rect)
 
-
-# ── Sidebar ───────────────────────────────────────────────────────────────────
+# ── HUD: 4 Cantos Flutuantes Alinhados às Bordas ──────────────────────────────
 def draw_sidebar(surf, game):
-    W      = C.W
-    H      = C.H
-    SIDE_W = C.SIDE_W
+    W = C.W
+    H = C.H
+    BX = C.BX
+    BY = C.BY
+    BSIZE = C.BSIZE
 
-    F_BIG, F_MED, F_SM, F_XSM = _fonts(SIDE_W)
+    lat_w = BX 
+    card_w = max(110, min(220, int(lat_w * 0.82)))
+    card_h = max(56, int(card_w * 0.45))
+    die_size = max(32, int(card_w * 0.4))
 
-    sx = max(4, SIDE_W // 26)
-    cw = SIDE_W - sx * 2
-    ch = max(60, int(H * 0.105))
+    F_BIG, F_MED, F_SM, F_XSM = _fonts(card_w)
 
-    pygame.draw.rect(surf, _PANEL_BG,   (0, 0, SIDE_W, H))
-    pygame.draw.rect(surf, _PANEL_EDGE, (0, 0, SIDE_W, H), 3)
+    gap = max(8, int(lat_w * 0.08))
+    rx_left  = BX - gap - card_w
+    rx_right = BX + BSIZE + gap
 
-    title_y = max(28, int(H * 0.042))
-    _txt_sh(surf, "LUDO", F_BIG, _HINT_COL, SIDE_W//2, title_y)
+    # Alinhado exatamente no topo da base (RY)
+    ry_top = BY
+    ry_bot = BY + BSIZE - card_h
 
-    card_start = title_y + max(28, int(H * 0.042))
-    card_gap   = ch + max(6, int(H * 0.01))
+    act_pid = game.players[game.turn].pid if game.phase != "end" else -1
 
-    for i, pl in enumerate(game.players):
-        y   = card_start + i * card_gap
-        act = (i == game.turn and game.phase != "end")
-        bg  = PC[pl.pid] if act else _CARD_IDLE
+    anchors_rx = {0: rx_left, 1: rx_right, 2: rx_right, 3: rx_left}
+    anchors_ry = {0: ry_top,  1: ry_top,   2: ry_bot,   3: ry_bot}
 
-        pygame.draw.rect(surf, bg,        (sx, y, cw, ch), border_radius=11)
-        pygame.draw.rect(surf, _HINT_COL, (sx, y, cw, ch), 3, border_radius=11)
-        pygame.draw.rect(surf, _INK,      (sx, y, cw, ch), 1, border_radius=11)
+    for pl in game.players:
+        pid = pl.pid
+        rx = anchors_rx[pid]
+        ry = anchors_ry[pid]
+        
+        cx = rx + card_w // 2
+        cy = ry + card_h // 2
+        act = (pid == act_pid)
 
-        display_name = C.PLAYER_DISPLAY_NAMES.get(pl.pid, PN[pl.pid])
-        _txt(surf, display_name, F_SM,  WHITE, SIDE_W//2, y + int(ch*0.25))
-        _txt(surf,
-             "Humano" if pl.human else "CPU",
-             F_XSM,
-             (235,228,255) if act else _DIM,
-             SIDE_W//2, y + int(ch*0.5))
+        bg = PC[pid] if act else _CARD_IDLE
+
+        pygame.draw.rect(surf, bg,        (rx, ry, card_w, card_h), border_radius=11)
+        pygame.draw.rect(surf, _HINT_COL, (rx, ry, card_w, card_h), 3 if act else 0, border_radius=11)
+        pygame.draw.rect(surf, _INK,      (rx, ry, card_w, card_h), 1, border_radius=11)
+
+        display_name = C.PLAYER_DISPLAY_NAMES.get(pid, PN[pid])
+        _txt(surf, display_name, F_SM,  WHITE, cx, ry + int(card_h*0.3))
+        _txt(surf, "Humano" if pl.human else "CPU", F_XSM, (235,228,255) if act else _DIM, cx, ry + int(card_h*0.6))
 
         fin  = sum(1 for p in pl.pieces if p.state == "done")
-        rp   = max(5, SIDE_W // 24)
-        pip_y = y + int(ch * 0.82)
-        pip_spacing = max(18, (cw - sx*2) // 4)
+        rp   = max(4, card_w // 24)
+        pip_y = ry + int(card_h * 0.85)
+        pip_spacing = max(12, (card_w - 20) // 4)
+        start_x = cx - (1.5 * pip_spacing)
         for k in range(4):
-            cx_   = sx + rp + k * pip_spacing
-            sh_c  = PD[pl.pid] if k < fin else (18,12,38)
-            body  = WHITE      if k < fin else PL[pl.pid]
-            edge  = PC[pl.pid] if k < fin else (60,48,92)
-            pygame.draw.circle(surf, sh_c, (cx_+1, pip_y+2), rp)
-            pygame.draw.circle(surf, body, (cx_,   pip_y),   rp)
-            pygame.draw.circle(surf, edge, (cx_,   pip_y),   rp, 2)
-            if k < fin:
-                pygame.draw.circle(surf, _INK, (cx_, pip_y), rp, 1)
+            px_   = start_x + k * pip_spacing
+            sh_c  = PD[pid] if k < fin else (18,12,38)
+            body  = WHITE   if k < fin else PL[pid]
+            edge  = PC[pid] if k < fin else (60,48,92)
+            pygame.draw.circle(surf, sh_c, (px_+1, pip_y+1), rp)
+            pygame.draw.circle(surf, body, (px_,   pip_y),   rp)
+            pygame.draw.circle(surf, edge, (px_,   pip_y),   rp, max(1, rp//2))
 
-    # Placar
-    if game.rankings:
-        ry   = card_start + len(game.players) * card_gap + max(8, int(H*0.012))
-        mcols= [_RANK_GOLD, _RANK_SILVER, _RANK_BRONZE, (148,148,148)]
-        lbls = ["#1","#2","#3","#4"]
-        _txt(surf, "Placar", F_XSM, _DIM, SIDE_W//2, ry)
-        for ri, pid in enumerate(game.rankings):
-            dname = C.PLAYER_DISPLAY_NAMES.get(pid, PN[pid])
-            _txt(surf, f"{lbls[min(ri,3)]} {dname}",
-                 F_XSM, mcols[min(ri,3)], SIDE_W//2, ry + int(H*0.026) + ri * int(H*0.026))
+        if act:
+            direction = 1 if pid in (0, 1) else -1
+            if direction == 1:
+                dcy = ry + card_h + die_size // 2 + max(8, int(H*0.015))
+            else:
+                dcy = ry - die_size // 2 - max(8, int(H*0.015))
 
-    # Dado
-    die_size = max(36, int(SIDE_W * 0.55))
-    dcx  = SIDE_W // 2
-    dcy  = H - int(H * 0.22)
-    spinning = game.dice_spin > 0
-    val = game.dice_show if spinning else (game.roll if game.roll else game.dice_final)
-    draw_die(surf, val, spinning, dcx, dcy, size=die_size)
+            spinning = game.dice_spin > 0
+            val = game.dice_show if spinning else (game.roll if game.roll else game.dice_final)
+            draw_die(surf, val, spinning, cx, dcy, size=die_size)
 
-    # Balão de dica
-    cp   = game.cp()
-    hint = ""
-    if game.phase == "roll" and cp.human and not spinning:
-        hint = "ESPACO = rolar"
-    elif game.phase == "pick":
-        hint = "Clique na peca"
-    elif not cp.human and game.phase in ("roll","aipick","anim"):
-        hint = "CPU pensando..."
+            cp = game.cp()
+            hint = ""
+            if game.phase == "roll" and cp.human and not spinning:
+                hint = "ESPACO = rolar"
+            elif game.phase == "pick":
+                hint = "Clique na peca"
+            elif not cp.human and game.phase in ("roll","aipick","anim", "anim_capture"):
+                hint = "CPU pensando..."
 
-    if hint:
-        hw = SIDE_W - 12
-        hx = 6
-        hy = H - int(H * 0.135)
-        hh = max(22, int(H * 0.038))
-        pygame.draw.rect(surf, _HINT_BG, (hx, hy, hw, hh), border_radius=8)
-        pygame.draw.rect(surf, _HINT_COL,(hx, hy, hw, hh), 2, border_radius=8)
-        pygame.draw.rect(surf, _INK,     (hx, hy, hw, hh), 1, border_radius=8)
-        _txt(surf, hint, F_XSM, _HINT_COL, SIDE_W//2, hy + hh//2)
+            if hint:
+                hh = max(20, int(card_h * 0.35))
+                if direction == 1:
+                    hy = dcy + die_size // 2 + hh // 2 + max(6, int(H*0.01))
+                else:
+                    hy = dcy - die_size // 2 - hh // 2 - max(6, int(H*0.01))
+                
+                rect_y = hy - hh // 2
+                
+                pygame.draw.rect(surf, _HINT_BG, (rx, rect_y, card_w, hh), border_radius=8)
+                pygame.draw.rect(surf, _HINT_COL,(rx, rect_y, card_w, hh), 2, border_radius=8)
+                _txt(surf, hint, F_XSM, _HINT_COL, cx, hy)
 
-    if game.msg:
-        _wrap_text(surf, game.msg, F_XSM, (255,205,85), SIDE_W//2, H - int(H*0.085), 20)
+                if game.msg:
+                    if direction == 1:
+                        msg_y = rect_y + hh + 8
+                    else:
+                        msg_y = rect_y - 8
+                    _wrap_text(surf, game.msg, F_XSM, (255,205,85), cx, msg_y, 22, direction)
 
-
-def _wrap_text(surf, text, font, color, cx, y0, max_chars):
+def _wrap_text(surf, text, font, color, cx, y0, max_chars, direction=1):
     words = text.split()
-    line, lines = "", []
+    line, lines = "" , []
     for w in words:
         t = (line + " " + w).strip()
         if len(t) <= max_chars:
@@ -359,32 +328,28 @@ def _wrap_text(surf, text, font, color, cx, y0, max_chars):
             if line: lines.append(line)
             line = w
     if line: lines.append(line)
-    for li, l in enumerate(lines[-4:]):
+    lines = lines[-4:]
+    if direction == -1:
+        y0 = y0 - (len(lines) * 16)
+    for li, l in enumerate(lines):
         _txt(surf, l, font, color, cx, y0 + li * 16)
 
-
-# ── Tela de fim ───────────────────────────────────────────────────────────────
 def draw_end_screen(surf, game):
     W = C.W
     H = C.H
-
-    F_BIG, F_MED, F_SM, F_XSM = _fonts(C.SIDE_W)
-
+    base_w = max(150, min(240, int(W * 0.15)))
+    F_BIG, F_MED, F_SM, F_XSM = _fonts(base_w)
     ov = pygame.Surface((W, H), pygame.SRCALPHA)
     ov.fill((18, 10, 48, 205))
     surf.blit(ov, (0, 0))
-
     pw = max(320, int(W * 0.44))
     ph = max(280, int(H * 0.52))
     px = W//2 - pw//2
     py = H//2 - ph//2 - 10
-
     pygame.draw.rect(surf, (46,34,84),  (px,py,pw,ph), border_radius=18)
     pygame.draw.rect(surf, _HINT_COL,   (px,py,pw,ph), 4, border_radius=18)
     pygame.draw.rect(surf, _INK,        (px,py,pw,ph), 1, border_radius=18)
-
     _txt_sh(surf, "FIM DE JOGO!", F_BIG, _HINT_COL, W//2, py + int(ph*0.12))
-
     mcols = [_RANK_GOLD, _RANK_SILVER, _RANK_BRONZE, (150,150,150)]
     lbls  = ["1o lugar","2o lugar","3o lugar","4o lugar"]
     row_h = int(ph * 0.16)
@@ -398,7 +363,6 @@ def draw_end_screen(surf, game):
         pygame.draw.rect(surf, _INK,    (plx, row_y-plh//2, plw, plh), 1, border_radius=10)
         dname = C.PLAYER_DISPLAY_NAMES.get(pid, PN[pid])
         _txt_sh(surf, f"{lbls[min(ri,3)]}: {dname}", F_MED, WHITE, W//2, row_y+1)
-
     bw, bh = int(pw * 0.49), int(ph * 0.13)
     bx_ = W//2 - bw//2
     by_ = py + ph - bh - int(ph*0.06)
