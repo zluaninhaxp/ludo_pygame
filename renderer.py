@@ -19,16 +19,38 @@ _font_cache = {}
 
 def _load_font(size, bold=False):
     key = (size, bold)
-    if key in _font_cache:
+    if key in _font_cache: 
         return _font_cache[key]
-    for name in ("Fredoka One", "Nunito", "Varela Round",
-                 "Comic Sans MS", "Arial Rounded MT Bold", "Arial"):
-        try:
-            f = pygame.font.SysFont(name, size, bold=bold)
-            _font_cache[key] = f
-            return f
-        except Exception:
-            pass
+    
+    import os
+    # Pega o diretório exato onde este script (.py) está salvo
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # Monta o caminho absoluto para a fonte
+    font_path = os.path.join(base_dir, "fonts", "Fredoka-Regular.ttf")
+    
+    try:
+        # 1. Carrega a fonte do arquivo
+        f = pygame.font.Font(font_path, size)
+        
+        # 2. Aplica o negrito se for solicitado
+        if bold:
+            f.set_bold(True)
+            
+        _font_cache[key] = f
+        return f
+    except Exception as e:
+        # 3. Se der erro, agora ele vai te avisar no terminal o motivo!
+        print(f"⚠️ Erro ao carregar a fonte Fredoka: {e}")
+        
+        # Fallback de segurança
+        for name in ("Fredoka One", "Fredoka", "Nunito", "Arial Rounded MT Bold", "Arial"):
+            try:
+                f = pygame.font.SysFont(name, size, bold=bold)
+                _font_cache[key] = f
+                return f
+            except Exception: 
+                pass
+                
     f = pygame.font.SysFont("Arial", size, bold=bold)
     _font_cache[key] = f
     return f
@@ -36,10 +58,10 @@ def _load_font(size, bold=False):
 def _fonts(card_w):
     base = max(10, card_w // 10)
     return (
-        _load_font(int(base * 3.0), bold=True),
-        _load_font(int(base * 1.6), bold=True),
-        _load_font(int(base * 1.3), bold=True),
-        _load_font(int(base * 0.9)),
+        _load_font(int(base * 2.4), bold=True),  # F_BIG (Telas de fim)
+        _load_font(int(base * 1.3), bold=True),  # F_MED
+        _load_font(int(base * 0.9), bold=True),  # F_SM  (Nomes dos jogadores)
+        _load_font(int(base * 0.6)),            # F_XSM (Tipo de jogador e dicas do dado)
     )
 
 _INK         = (52,  42,  76)
@@ -367,13 +389,15 @@ def draw_sidebar(surf, game):
         surf.blit(avatar_img, avatar_img.get_rect(center=(avatar_x, avatar_y)))
 
         name_x = rx + 15 + avatar_sz
-        name_y = ry + head_h // 2
+        # Subindo 2 pixels para compensar a base da Fredoka
+        name_y = ry + head_h // 2 - 2  
         display_name = C.PLAYER_DISPLAY_NAMES.get(pid, PN[pid])
         
         # Usando _txt no lugar de _txt_sh para remover a sombra
         _txt(surf, display_name, F_SM, WHITE, name_x, name_y, anchor="ml")
         
-        type_y = ry + head_h + 12
+        # Subindo 2 pixels também no subtexto
+        type_y = ry + head_h + 12 - 2  
         type_str = "Tipo: Humano" if pl.human else "Tipo: CPU"
         _txt(surf, type_str, F_XSM, (210, 200, 220), name_x, type_y, anchor="ml")
 
