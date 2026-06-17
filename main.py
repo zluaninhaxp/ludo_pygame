@@ -15,15 +15,10 @@ def _initial_size():
     sw, sh = info.current_w, info.current_h
     
     scale = 0.70
-    h = int(sh * scale) & ~15          # Mantém a altura legal que você gostou
-    
-    # MÁGICA AQUI: A largura agora é calculada para ser no formato Widescreen (16:9)
+    h = int(sh * scale) & ~15
     w = int(h * (16 / 9)) & ~15
-    
-    # Garante que não vai estourar o monitor do jogador
     w = min(w, int(sw * 0.9) & ~15)
     
-    # Largura mínima de 850 para não espremer os cards se a tela for pequena
     return max(w, 850), max(h, 480)
 
 
@@ -73,11 +68,10 @@ def main():
                     )
                 w, h = screen.get_size()
                 constants.resize(w, h)
-                # Recria o menu para recalcular posições dos botões
                 if game is None:
                     menu = Menu()
 
-            # Janela redimensionada pelo usuário (arrastar borda)
+            # Janela redimensionada pelo usuário
             if event.type == pygame.VIDEORESIZE:
                 w, h = event.w, event.h
                 screen = pygame.display.set_mode((w, h), pygame.RESIZABLE)
@@ -95,6 +89,13 @@ def main():
                         menu = Menu()
                         game = None
                         continue
+                    
+                    # ── ATALHO DE TESTE: APERTE F9 DURANTE O JOGO ──
+                    if event.key == pygame.K_F9:
+                        game.phase = "end"
+                        game.rankings = [0, 1, 2, 3] # Força os 4 jogadores no ranking
+                    # ───────────────────────────────────────────────
+
                     if (event.key == pygame.K_SPACE
                             and game.phase == "roll"
                             and game.cp().human
@@ -122,7 +123,6 @@ def main():
                 draw_end_screen(screen, game)
 
         pygame.display.flip()
-
 
 if __name__ == "__main__":
     main()

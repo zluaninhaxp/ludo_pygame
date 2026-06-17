@@ -46,6 +46,9 @@ CHARACTER_ROSTER = [
     ("jean",    "Jean"),
     ("hudson",    "Hudson"),
     ("bianca",    "Bianca"),
+    ("vantuil",    "Vantuil"),
+    ("fabio",    "Fábio"),
+    ("caiot",     "Caio Tomaz"),
 ]
 
 CHARACTER_NAMES = {slug: name for slug, name in CHARACTER_ROSTER}

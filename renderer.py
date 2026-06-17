@@ -5,6 +5,7 @@ import pygame
 import math
 import os
 import constants as C
+import random
 
 WHITE = C.WHITE
 BLACK = C.BLACK
@@ -440,42 +441,137 @@ def _wrap_text(surf, text, font, color, cx, y0, max_chars, direction=1):
         # Removida a sombra aqui também, usando apenas _txt
         _txt(surf, l, font, color, cx, y0 + li * 16)
 
+_confetti = []
+
+def _draw_confetti(surf, game):
+    if not _confetti:
+        for _ in range(120): # Um pouco mais de itens
+            # Define tipos: 0 = quadrado pequeno, 1 = fita fina
+            _confetti.append({
+                'x': random.randint(0, C.W),
+                'y': random.randint(-C.H, 0),
+                'speed': random.uniform(2, 5),
+                'angle': random.uniform(0, 360),
+                'rot_speed': random.uniform(-0.1, 0.1),
+                'type': random.choice(['square', 'ribbon']),
+                'size': random.randint(6, 12),
+                'color': random.choice([C.PL[0], C.PL[1], C.PL[2], C.PL[3], (255, 210, 50)])
+            })
+
+    for c in _confetti:
+        c['y'] += c['speed']
+        c['angle'] += c['rot_speed'] # Gira suavemente
+        
+        if c['y'] > C.H:
+            c['y'] = -20
+            c['x'] = random.randint(0, C.W)
+        
+        # Cria uma superfície para girar o confete
+        s = pygame.Surface((c['size'], c['size']), pygame.SRCALPHA)
+        
+        if c['type'] == 'square':
+            pygame.draw.rect(s, c['color'], (0, 0, c['size'], c['size']))
+        else:
+            # Fita fina (retângulo)
+            pygame.draw.rect(s, c['color'], (0, 0, c['size']//2, c['size']))
+            
+        rotated_surf = pygame.transform.rotate(s, c['angle'])
+        surf.blit(rotated_surf, (c['x'], c['y']))
 
 def draw_end_screen(surf, game):
     W = C.W
     H = C.H
-    base_w = max(150, min(240, int(W * 0.15)))
-    F_BIG, F_MED, F_SM, F_XSM = _fonts(base_w)
-    ov = pygame.Surface((W, H), pygame.SRCALPHA)
-    ov.fill((18, 10, 48, 205))
-    surf.blit(ov, (0, 0))
-    pw = max(320, int(W * 0.44))
-    ph = max(280, int(H * 0.52))
+    
+    pw = max(700, int(W * 0.65))
+    ph = max(550, int(H * 0.75))
     px = W//2 - pw//2
-    py = H//2 - ph//2 - 10
-    pygame.draw.rect(surf, (46,34,84),  (px,py,pw,ph), border_radius=18)
-    pygame.draw.rect(surf, _HINT_COL,   (px,py,pw,ph), 4, border_radius=18)
-    pygame.draw.rect(surf, _INK,        (px,py,pw,ph), 1, border_radius=18)
-    _txt_sh(surf, "FIM DE JOGO!", F_BIG, _HINT_COL, W//2, py + int(ph*0.12))
-    mcols = [_RANK_GOLD, _RANK_SILVER, _RANK_BRONZE, (150,150,150)]
-    lbls  = ["1o lugar","2o lugar","3o lugar","4o lugar"]
-    row_h = int(ph * 0.16)
-    for ri, pid in enumerate(game.rankings):
-        row_y = py + int(ph*0.27) + ri * row_h
-        plw   = int(pw * 0.75)
-        plh   = int(row_h * 0.72)
-        plx   = W//2 - plw//2
-        pygame.draw.rect(surf, PC[pid], (plx, row_y-plh//2, plw, plh), border_radius=10)
-        pygame.draw.rect(surf, PD[pid], (plx, row_y-plh//2, plw, plh), 2, border_radius=10)
-        pygame.draw.rect(surf, _INK,    (plx, row_y-plh//2, plw, plh), 1, border_radius=10)
-        dname = C.PLAYER_DISPLAY_NAMES.get(pid, PN[pid])
-        _txt_sh(surf, f"{lbls[min(ri,3)]}: {dname}", F_MED, WHITE, W//2, row_y+1)
-    bw, bh = int(pw * 0.49), int(ph * 0.13)
-    bx_ = W//2 - bw//2
-    by_ = py + ph - bh - int(ph*0.06)
-    pygame.draw.rect(surf, (10,68,10),  (bx_+3, by_+4, bw, bh), border_radius=12)
-    pygame.draw.rect(surf, (50,168,50), (bx_,   by_,   bw, bh), border_radius=12)
-    pygame.draw.rect(surf, (88,208,88), (bx_+6, by_+5, bw-12, bh//4), border_radius=7)
-    pygame.draw.rect(surf, (28,118,28), (bx_,   by_,   bw, bh), 2, border_radius=12)
-    pygame.draw.rect(surf, _INK,        (bx_,   by_,   bw, bh), 1, border_radius=12)
-    _txt_sh(surf, "[R]  Reiniciar", F_MED, WHITE, W//2, by_ + bh//2 + 1)
+    py = H//2 - ph//2
+    
+    ov = pygame.Surface((W, H), pygame.SRCALPHA)
+    ov.fill((15, 10, 30, 210))
+    surf.blit(ov, (0, 0))
+
+    _draw_confetti(surf, game)
+    
+    # Caixa principal do modal
+    pygame.draw.rect(surf, (0,0,0,40), (px+5, py+5, pw, ph), border_radius=24)
+    pygame.draw.rect(surf, (48, 42, 75), (px, py, pw, ph), border_radius=24)
+
+    
+    F_BIG, F_MED, F_SM, F_XSM = _fonts(int(pw * 0.25))
+    
+    # 1. Título
+    _txt(surf, "FIM DE JOGO!", F_BIG, (255, 210, 50), W//2, py + int(ph * 0.12))
+    
+    # ── MATEMÁTICA DO PÓDIO ──
+    base_y = py + ph - 150
+    step_w = int(pw * 0.23) 
+    h1, h2, h3 = int(ph * 0.30), int(ph * 0.20), int(ph * 0.12)
+    
+    respiro = int(pw * 0.02)
+    pos_x = [W//2, W//2 - step_w - respiro, W//2 + step_w + respiro]
+    heights = [h1, h2, h3]
+    colors_medal = [_RANK_GOLD, _RANK_SILVER, _RANK_BRONZE]
+    labels = ["1º", "2º", "3º"]
+    
+    for i in range(min(3, len(game.rankings))):
+        pid = game.rankings[i]
+        x, h = pos_x[i], heights[i]
+        y = base_y - h
+        
+        # ── Bloco do degrau (Visual padrão igual ao 3º colocado) ──
+        step_rect = pygame.Rect(x - step_w//2, y, step_w, h)
+        
+        # Cor de fundo sólida (sem a faixa clara no topo)
+        pygame.draw.rect(surf, (0,0,0,30), step_rect.move(5,0), border_radius=10)
+        pygame.draw.rect(surf, PD[pid], step_rect, border_radius=10)
+        
+        # Borda externa simples para manter o estilo limpo
+        pygame.draw.rect(surf, _INK, step_rect, 2, border_radius=10)
+        
+        # A medalha agora fica centralizada no topo do pilar
+        pygame.draw.circle(surf, (0,0,0,40), (x, y + 18), 16)
+        pygame.draw.circle(surf, colors_medal[i], (x, y + 15), 16)
+        pygame.draw.circle(surf, (255,255,255,100), (x, y + 15), 16, 2)
+        _txt(surf, labels[i], F_SM, _INK, x, y + 13)
+        
+       # ── CABEÇAS FLUTUANDO (LENTAS E DESINCRONIZADAS) ──
+        avatar_sz = int(step_w * 0.75) 
+        
+        # O (i * 1.5) faz com que cada um comece em um ponto diferente da onda
+        # O 0.003 torna o movimento mais lento e relaxado
+        tempo = pygame.time.get_ticks() * 0.003
+        float_y = math.sin(tempo + (i * 1.5)) * 8
+        
+        base_avatar_y = y - avatar_sz // 2 - 10
+        avatar_y = base_avatar_y + float_y
+        
+        nome_img = C.PLAYER_CHOICES.get(pid, "default")
+        img = _get_piece_image(nome_img, avatar_sz)
+        
+        # Sombra desenhada baseada na posição atual da cabeça
+        img_shadow = img.copy()
+        img_shadow.fill((0, 0, 0, 90), special_flags=pygame.BLEND_RGBA_MULT)
+        surf.blit(img_shadow, img_shadow.get_rect(center=(x, avatar_y + 5)))
+        surf.blit(img, img.get_rect(center=(x, avatar_y)))
+
+    # 4º lugar (Único com nome)
+    if len(game.rankings) > 3:
+        pid4 = game.rankings[3]
+        dname4 = C.PLAYER_DISPLAY_NAMES.get(pid4, PN[pid4])
+        _txt(surf, f"4º lugar: {dname4} ", F_SM, (150, 140, 180), W//2, base_y + 20)
+
+    # ── BOTÃO REINICIAR ──
+    bw, bh = int(pw * 0.35), int(55)
+    bx, by = W//2 - bw//2, py + ph - bh - 40 
+    
+    # Criamos o rect e salvamos na instância do game para o main.py detectar o clique
+    game.restart_rect = pygame.Rect(bx, by, bw, bh)
+    
+    pygame.draw.rect(surf, (0,0,0,20), (bx+3, by+3, bw, bh), border_radius=16)
+    pygame.draw.rect(surf, (40, 180, 80), (bx, by, bw, bh), border_radius=16)
+    pygame.draw.rect(surf, _INK, (bx, by, bw, bh), 2, border_radius=16)
+    _txt(surf, "REINICIAR", F_MED, WHITE, W//2, by + bh//2 - 2)
+    
+    # Legenda menor abaixo
+    _txt(surf, "(ou aperte R)", F_XSM, (150, 140, 180), W//2, by + bh + 15)

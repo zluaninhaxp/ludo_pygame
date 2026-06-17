@@ -185,7 +185,7 @@ class Menu:
         
         pygame.draw.rect(surf, (0,0,0,20), rect_minus.move(2,2), border_radius=10)
         pygame.draw.rect(surf, (180, 50, 80), rect_minus, border_radius=10)
-        _txt(surf, "-", L['F_BIG'], C.WHITE, rect_minus.centerx, rect_minus.centery - 4)
+        _txt(surf, "-", L['F_MED'], C.WHITE, rect_minus.centerx, rect_minus.centery - 4)
         
         # ── DESENHO DOS CARDS ──
         for i, (crect, type_rect, pick_rect) in enumerate(cards):
@@ -241,7 +241,7 @@ class Menu:
         # Botão INICIAR
         pygame.draw.rect(surf, (0,0,0,20), start_rect.move(3,3), border_radius=20)
         pygame.draw.rect(surf, (40, 200, 90), start_rect, border_radius=20)
-        _txt(surf, "▶ INICIAR", L['F_MED'], C.WHITE, start_rect.centerx, start_rect.centery - 2)
+        _txt(surf, "INICIAR", L['F_MED'], C.WHITE, start_rect.centerx, start_rect.centery - 2)
         _txt(surf, "Setas = jogadores · ENTER = iniciar", L['F_XXSM'], (130, 120, 160), cx, start_rect.bottom + int(15*sc))
 
     # ── TELA PICKER (MODAL) ───────────────────────────────────────────────────
