@@ -571,7 +571,7 @@ def draw_end_screen(surf, game):
     pygame.draw.rect(surf, (0,0,0,20), (bx+3, by+3, bw, bh), border_radius=16)
     pygame.draw.rect(surf, (40, 180, 80), (bx, by, bw, bh), border_radius=16)
     pygame.draw.rect(surf, _INK, (bx, by, bw, bh), 2, border_radius=16)
-    _txt(surf, "REINICIAR", F_MED, WHITE, W//2, by + bh//2 - 2)
+    _txt(surf, "Jogar Novamente", F_MED, WHITE, W//2, by + bh//2 - 2)
     
     # Legenda menor abaixo
     _txt(surf, "(ou aperte R)", F_XSM, (150, 140, 180), W//2, by + bh + 15)

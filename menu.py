@@ -51,12 +51,21 @@ def _sh(color, amt=45):
     b = max(0, min(255, color[2] - amt))
     return (r, g, b)
 
+_CHAR_CACHE = {}
+
 def _get_char_img(slug, size):
+    # 1. Verifica se a imagem já foi carregada e processada neste tamanho
+    key = (slug, size)
+    if key in _CHAR_CACHE:
+        return _CHAR_CACHE[key]
+        
     surf = pygame.Surface((size, size), pygame.SRCALPHA)
     import os
     arquivo = "random" if slug is None else slug
     path = os.path.join("images", f"{arquivo}.png")
+    
     try:
+        # 2. Carrega e redimensiona (agora isso só vai acontecer UMA vez por imagem)
         img = pygame.image.load(path).convert_alpha()
         max_side = max(img.get_width(), img.get_height())
         scale = (size / max_side) * (0.65 if slug is None else 1.0)
@@ -70,6 +79,9 @@ def _get_char_img(slug, size):
         font = _load_font(int(size * 0.5), bold=True)
         texto_fallback = "?" if slug is None else "X"
         _txt(surf, texto_fallback, font, (255, 255, 255), size//2, size//2 - 2)
+        
+    # 3. Salva no cache antes de retornar
+    _CHAR_CACHE[key] = surf
     return surf
 
 _SHADOW_CACHE = {}

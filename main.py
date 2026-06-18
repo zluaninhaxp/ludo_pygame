@@ -88,13 +88,15 @@ def main():
                     if event.key == pygame.K_r:
                         menu = Menu()
                         game = None
+                        
+                        # Limpa os confetes se estiver usando a animação no renderer
+                        try:
+                            import renderer
+                            renderer._confetti = []
+                        except:
+                            pass
+                            
                         continue
-                    
-                    # ── ATALHO DE TESTE: APERTE F9 DURANTE O JOGO ──
-                    if event.key == pygame.K_F9:
-                        game.phase = "end"
-                        game.rankings = [0, 1, 2, 3] # Força os 4 jogadores no ranking
-                    # ───────────────────────────────────────────────
 
                     if (event.key == pygame.K_SPACE
                             and game.phase == "roll"
@@ -103,6 +105,22 @@ def main():
                         game.start_roll()
 
                 if event.type == pygame.MOUSEBUTTONDOWN:
+                    # ── VERIFICAÇÃO DO BOTÃO REINICIAR ──
+                    if game.phase == "end" and hasattr(game, 'restart_rect'):
+                        if game.restart_rect.collidepoint(event.pos):
+                            menu = Menu()
+                            game = None
+                            
+                            # Limpa os confetes ao reiniciar pelo botão também
+                            try:
+                                import renderer
+                                renderer._confetti = []
+                            except:
+                                pass
+                                
+                            continue 
+                    
+                    # ── CLIQUE NORMAL DO JOGO ──
                     game.click(*event.pos)
 
         # ── Atualização ───────────────────────────────────────────────────────
